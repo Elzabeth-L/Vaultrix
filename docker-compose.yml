@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # Databases
+  users-db:
+    image: mongo:6
+    container_name: vaultrix-users-db
+    ports:
+      - "27017:27017"
+    volumes:
+      - users_data:/data/db
+
+  orders-db:
+    image: mongo:6
+    container_name: vaultrix-orders-db
+    ports:
+      - "27018:27017"
+    volumes:
+      - orders_data:/data/db
+
+  wallet-db:
+    image: mongo:6
+    container_name: vaultrix-wallet-db
+    ports:
+      - "27019:27017"
+    volumes:
+      - wallet_data:/data/db
+
+  transaction-db:
+    image: mongo:6
+    container_name: vaultrix-transaction-db
+    ports:
+      - "27020:27017"
+    volumes:
+      - transaction_data:/data/db
+
+  ledger-db:
+    image: mongo:6
+    container_name: vaultrix-ledger-db
+    ports:
+      - "27021:27017"
+    volumes:
+      - ledger_data:/data/db
+
+  # Redis Cache & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: vaultrix-redis
+    ports:
+      - "6379:6379"
+
+  # Microservices
+  user-service:
+    build: ./src/user-service
+    container_name: vaultrix-user-service
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - MONGO_URI=mongodb://users-db:27017/users_db
+    depends_on:
+      - users-db
+
+  order-service:
+    build: ./src/order-service
+    container_name: vaultrix-order-service
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - MONGO_URI=mongodb://orders-db:27017/orders_db
+    depends_on:
+      - orders-db
+
+  wallet-service:
+    build: ./src/wallet-service
+    container_name: vaultrix-wallet-service
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - MONGO_URI=mongodb://wallet-db:27017/wallet_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - wallet-db
+      - redis
+
+  transaction-service:
+    build: ./src/transaction-service
+    container_name: vaultrix-transaction-service
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+      - MONGO_URI=mongodb://transaction-db:27017/transaction_db
+      - REDIS_URL=redis://redis:6379
+      - ORDER_SERVICE_URL=http://order-service:3002
+      - USER_SERVICE_URL=http://user-service:3001
+      - WALLET_SERVICE_URL=http://wallet-service:3003
+    depends_on:
+      - transaction-db
+      - redis
+      - order-service
+      - user-service
+      - wallet-service
+
+  ledger-service:
+    build: ./src/ledger-service
+    container_name: vaultrix-ledger-service
+    ports:
+      - "3005:3005"
+    environment:
+      - PORT=3005
+      - MONGO_URI=mongodb://ledger-db:27017/ledger_db
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - ledger-db
+      - redis
+
+  api-gateway:
+    build: ./src/api-gateway
+    container_name: vaultrix-api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - USER_SERVICE_URL=http://user-service:3001
+      - ORDER_SERVICE_URL=http://order-service:3002
+      - WALLET_SERVICE_URL=http://wallet-service:3003
+      - TRANSACTION_SERVICE_URL=http://transaction-service:3004
+      - LEDGER_SERVICE_URL=http://ledger-service:3005
+    depends_on:
+      - user-service
+      - order-service
+      - wallet-service
+      - transaction-service
+      - ledger-service
+
+  frontend:
+    build: ./frontend
+    container_name: vaultrix-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+
+volumes:
+  users_data:
+  orders_data:
+  wallet_data:
+  transaction_data:
+  ledger_data:
