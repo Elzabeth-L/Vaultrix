@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { Activity, CheckCircle, XCircle, Clock, LogOut, RefreshCw, Flag, BarChart2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../api';
+import { clearAuth } from '../utils/auth';
 
 const TABS = ['PENDING', 'APPROVED', 'COMPLETED', 'REJECTED'];
 
 function Sidebar({ active, setActive }) {
   const navigate = useNavigate();
-  const logout = () => { localStorage.clear(); navigate('/login'); };
+  const logout = () => { clearAuth(); navigate('/login'); };
 
   return (
     <aside className="sidebar">
@@ -105,12 +106,7 @@ function OrderManagement() {
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {TABS.map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={`btn ${tab === t ? 'btn-primary' : 'btn-secondary'}`}
-            style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}
-          >
+          <button key={t} onClick={() => setTab(t)} className={`btn ${tab === t ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
             {t}
           </button>
         ))}
@@ -131,7 +127,7 @@ function OrderManagement() {
                   <StatusBadge status={order.status} paymentStatus={order.paymentStatus} />
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.83rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                  <span>Rs {order.amount}</span>
+                  <span>${order.amount}</span>
                   <span>User: {order.userName || order.userId?.slice(-6)}</span>
                   {order.userEmail && <span>Email: {order.userEmail}</span>}
                   <span>{order.address}</span>
@@ -171,18 +167,8 @@ function OrderManagement() {
 
             {rejectFor === order._id && (
               <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input
-                  className="form-control"
-                  placeholder="Required: e.g. the requested date is unavailable"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  style={{ flex: 1, minWidth: 260 }}
-                />
-                <button
-                  className="btn btn-danger btn-sm"
-                  disabled={acting === order._id + 'reject'}
-                  onClick={() => doAction(order._id, 'reject', { reason })}
-                >
+                <input className="form-control" placeholder="Required: e.g. the requested date is unavailable" value={reason} onChange={(e) => setReason(e.target.value)} style={{ flex: 1, minWidth: 260 }} />
+                <button className="btn btn-danger btn-sm" disabled={acting === order._id + 'reject'} onClick={() => doAction(order._id, 'reject', { reason })}>
                   {acting === order._id + 'reject' ? <span className="spinner" /> : 'Send Rejection'}
                 </button>
                 <button className="btn btn-secondary btn-sm" onClick={() => { setRejectFor(null); setReason(''); }}>Cancel</button>
@@ -233,8 +219,8 @@ function Statistics() {
     <div className="animate-in">
       <div className="stats-grid" style={{ marginBottom: '2rem' }}>
         <div className="stat-card"><div className="stat-icon indigo"><CheckCircle size={18} /></div><div className="card-title">Total Orders</div><div className="card-value">{allOrders.length}</div></div>
-        <div className="stat-card"><div className="stat-icon green"><CheckCircle size={18} /></div><div className="card-title">Revenue Collected</div><div className="card-value">Rs {revenue.toFixed(0)}</div></div>
-        <div className="stat-card"><div className="stat-icon cyan"><Clock size={18} /></div><div className="card-title">Pending Payment</div><div className="card-value">Rs {pending.toFixed(0)}</div></div>
+        <div className="stat-card"><div className="stat-icon green"><CheckCircle size={18} /></div><div className="card-title">Revenue Collected</div><div className="card-value">${revenue.toFixed(0)}</div></div>
+        <div className="stat-card"><div className="stat-icon cyan"><Clock size={18} /></div><div className="card-title">Pending Payment</div><div className="card-value">${pending.toFixed(0)}</div></div>
       </div>
 
       <div className="card" style={{ padding: '1.5rem', height: 300 }}>

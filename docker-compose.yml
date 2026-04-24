@@ -45,6 +45,7 @@ services:
       - MONGO_URI=mongodb://users-db:27017/users_db
       - JWT_SECRET=vaultrix-super-secret-key
       - WALLET_SERVICE_URL=http://wallet-service:3003
+      - INTERNAL_SERVICE_TOKEN=vaultrix-internal-token
     depends_on:
       - users-db
 
@@ -58,6 +59,8 @@ services:
       - PORT=3002
       - MONGO_URI=mongodb://orders-db:27017/orders_db
       - NOTIFICATION_SERVICE_URL=http://notification-service:3007
+      - USER_SERVICE_URL=http://user-service:3001
+      - INTERNAL_SERVICE_TOKEN=vaultrix-internal-token
     depends_on:
       - orders-db
       - notification-service
@@ -87,8 +90,10 @@ services:
     environment:
       - PORT=3005
       - MONGO_URI=mongodb://invoice-db:27017/invoice_db
+      - ORDER_SERVICE_URL=http://order-service:3002
     depends_on:
       - invoice-db
+      - order-service
 
   review-service:
     build: ./src/review-service

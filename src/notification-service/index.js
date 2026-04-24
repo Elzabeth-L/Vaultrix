@@ -73,14 +73,14 @@ const orderSummaryText = (order) => [
   `Service: ${order.serviceName}`,
   `Appointment: ${formatDateTime(order.scheduledDate)}`,
   `Address: ${order.address}`,
-  `Amount: Rs ${order.amount}`,
+  `Amount: $${order.amount}`,
   `Reference: #${String(order._id || '').slice(-6)}`,
 ].join('\n');
 
 const renderEmail = (eventType, order) => {
   const customerName = order.userName || 'there';
   const scheduledDate = formatDateTime(order.scheduledDate);
-  const amount = `Rs ${order.amount}`;
+  const amount = `$${order.amount}`;
   const reference = `#${String(order._id || '').slice(-6)}`;
   const escapedDescription = escapeHtml(order.description || '');
   const escapedAddress = escapeHtml(order.address || '');

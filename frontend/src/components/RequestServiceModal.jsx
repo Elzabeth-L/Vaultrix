@@ -14,11 +14,11 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
   const fixedAmount = Number(service.priceFrom) || 0;
   const [form, setForm] = useState({ description: '', address: '', scheduledDate: '', amount: fixedAmount });
   const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState('');
+  const [error, setError] = useState('');
 
-  const handle = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+  const handle = (e) => setForm((f) => ({ ...f, [e.target.name]: e.target.value }));
 
-  const submit = async e => {
+  const submit = async (e) => {
     e.preventDefault();
     setError('');
     if (!user?.id || !user?.email || !user?.name) return setError('Please log in again before placing a request.');
@@ -28,20 +28,22 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
     setLoading(true);
     try {
       await api.post('/orders', {
-        userId:        user.id,
-        userName:      user.name,
-        userEmail:     user.email,
-        serviceId:     service.id,
-        serviceName:   service.name,
-        description:   form.description,
-        address:       form.address,
+        userId: user.id,
+        userName: user.name,
+        userEmail: user.email,
+        serviceId: service.id,
+        serviceName: service.name,
+        description: form.description,
+        address: form.address,
         scheduledDate: form.scheduledDate,
-        amount:        fixedAmount,
+        amount: fixedAmount,
       });
       onSuccess?.();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to submit request. Please try again.');
-    } finally { setLoading(false); }
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -95,12 +97,12 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
             </span>
           </div>
           <div className="form-group">
-            <label><DollarSign size={14} style={{ marginRight: '0.4rem' }} />Fixed service amount (Rs)</label>
+            <label><DollarSign size={14} style={{ marginRight: '0.4rem' }} />Fixed service amount ($)</label>
             <input
               name="amount"
               type="text"
               className="form-control"
-              value={`Rs ${fixedAmount}`}
+              value={`$${fixedAmount}`}
               readOnly
               aria-readonly="true"
             />
