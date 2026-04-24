@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { X, Star } from 'lucide-react';
 import api from '../api';
 import { getCurrentUser } from '../utils/auth';
-import { REVIEW_CRITERIA } from '../utils/services';
+import { getReviewCriteriaForService } from '../utils/services';
 
 function StarRating({ value, onChange }) {
   const [hover, setHover] = useState(0);
@@ -23,7 +23,7 @@ function StarRating({ value, onChange }) {
 
 export default function ReviewModal({ order, onClose, onSuccess }) {
   const user     = getCurrentUser();
-  const criteria = REVIEW_CRITERIA[order.serviceId] || REVIEW_CRITERIA['default'];
+  const criteria = getReviewCriteriaForService(order.serviceId);
   const [ratings,  setRatings]  = useState(Object.fromEntries(criteria.map(c => [c, 0])));
   const [overall,  setOverall]  = useState(0);
   const [comment,  setComment]  = useState('');

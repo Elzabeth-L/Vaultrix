@@ -1,19 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Activity, Search, Star, ArrowRight, LogOut } from 'lucide-react';
-import { SERVICES } from '../utils/services';
+import { getServices, SERVICES_REGISTRY_EVENT } from '../utils/services';
 import RequestServiceModal from '../components/RequestServiceModal';
 import { clearAuth, getCurrentUser } from '../utils/auth';
 
 export default function ServiceCatalog() {
   const user = getCurrentUser();
   const navigate = useNavigate();
+  const [services, setServices] = useState(() => getServices());
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
   const [category, setCategory] = useState('All');
 
-  const categories = ['All', ...new Set(SERVICES.map((s) => s.category))];
-  const filtered = SERVICES.filter((s) =>
+  useEffect(() => {
+    const syncServices = () => setServices(getServices());
+    window.addEventListener(SERVICES_REGISTRY_EVENT, syncServices);
+    window.addEventListener('storage', syncServices);
+    return () => {
+      window.removeEventListener(SERVICES_REGISTRY_EVENT, syncServices);
+      window.removeEventListener('storage', syncServices);
+    };
+  }, []);
+
+  const categories = useMemo(() => ['All', ...new Set(services.map((s) => s.category))], [services]);
+  const filtered = services.filter((s) =>
     (category === 'All' || s.category === category) &&
     s.name.toLowerCase().includes(search.toLowerCase())
   );

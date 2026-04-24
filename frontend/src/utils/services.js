@@ -11,9 +11,13 @@ export const SERVICE_BACKGROUNDS = {
   moving: 'https://5.imimg.com/data5/BA/FY/QO/SELLER-94934398/furniture-shifting-service-500x500.jpg',
 };
 
+const SERVICES_STORAGE_KEY = 'vaultrix_services';
+const REVIEW_CRITERIA_STORAGE_KEY = 'vaultrix_review_criteria';
+const SERVICES_UPDATED_EVENT = 'vaultrix:services-updated';
+
 export const getServiceBackground = (serviceId) => SERVICE_BACKGROUNDS[serviceId] || DEFAULT_SERVICE_BACKGROUND;
 
-export const SERVICES = [
+const DEFAULT_SERVICES = [
   {
     id: 'cleaning',
     name: 'Home Cleaning',
@@ -88,7 +92,7 @@ export const SERVICES = [
   },
 ];
 
-export const REVIEW_CRITERIA = {
+const DEFAULT_REVIEW_CRITERIA = {
   cleaning: ['Cleanliness', 'Timeliness', 'Professionalism'],
   plumbing: ['Workmanship', 'Timeliness', 'Value for Money'],
   carpentry: ['Workmanship', 'Quality', 'Timeliness'],
@@ -99,3 +103,103 @@ export const REVIEW_CRITERIA = {
   moving: ['Care', 'Timeliness', 'Professionalism'],
   default: ['Quality', 'Timeliness', 'Professionalism'],
 };
+
+const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
+
+const readJson = (key, fallback) => {
+  if (!canUseStorage()) return fallback;
+  try {
+    const raw = window.localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+const writeJson = (key, value) => {
+  if (!canUseStorage()) return;
+  window.localStorage.setItem(key, JSON.stringify(value));
+};
+
+const emitServicesUpdated = () => {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(SERVICES_UPDATED_EVENT));
+};
+
+const slugify = (value = '') =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || `service-${Date.now()}`;
+
+const normalizeService = (service = {}) => {
+  const id = slugify(service.id || service.name);
+  return {
+    id,
+    name: String(service.name || '').trim(),
+    icon: String(service.icon || '\u{1F6E0}\uFE0F').trim(),
+    description: String(service.description || '').trim(),
+    priceFrom: Math.max(0, Number(service.priceFrom) || 0),
+    category: String(service.category || 'General').trim(),
+    backgroundImage: String(service.backgroundImage || getServiceBackground(id)).trim() || DEFAULT_SERVICE_BACKGROUND,
+    isCustom: Boolean(service.isCustom),
+  };
+};
+
+const parseCriteria = (criteria) => {
+  if (Array.isArray(criteria)) {
+    return criteria.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  return String(criteria || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+export const getCustomServices = () => readJson(SERVICES_STORAGE_KEY, []).map((service) => normalizeService({ ...service, isCustom: true }));
+
+export const getServices = () => {
+  const base = DEFAULT_SERVICES.map((service) => ({ ...service, isCustom: false }));
+  const custom = getCustomServices();
+  return [...base, ...custom];
+};
+
+export const getServiceById = (serviceId) => getServices().find((service) => service.id === serviceId) || null;
+
+export const getReviewCriteriaMap = () => ({
+  ...DEFAULT_REVIEW_CRITERIA,
+  ...readJson(REVIEW_CRITERIA_STORAGE_KEY, {}),
+});
+
+export const getReviewCriteriaForService = (serviceId) => getReviewCriteriaMap()[serviceId] || DEFAULT_REVIEW_CRITERIA.default;
+
+export const addCustomService = (serviceInput, reviewCriteriaInput) => {
+  const service = normalizeService({ ...serviceInput, isCustom: true });
+  if (!service.name || !service.description || !service.priceFrom) {
+    throw new Error('Name, description, and price are required.');
+  }
+
+  const services = getServices();
+  if (services.some((existing) => existing.id === service.id)) {
+    throw new Error('A service with this ID already exists.');
+  }
+
+  const customServices = getCustomServices();
+  customServices.push(service);
+  writeJson(SERVICES_STORAGE_KEY, customServices);
+
+  const criteria = parseCriteria(reviewCriteriaInput);
+  if (criteria.length) {
+    const reviewCriteria = readJson(REVIEW_CRITERIA_STORAGE_KEY, {});
+    reviewCriteria[service.id] = criteria;
+    writeJson(REVIEW_CRITERIA_STORAGE_KEY, reviewCriteria);
+  }
+
+  emitServicesUpdated();
+  return service;
+};
+
+export const SERVICES = DEFAULT_SERVICES;
+export const REVIEW_CRITERIA = DEFAULT_REVIEW_CRITERIA;
+export const SERVICES_REGISTRY_EVENT = SERVICES_UPDATED_EVENT;
