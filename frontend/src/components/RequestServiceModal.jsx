@@ -49,11 +49,24 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
       <div className="auth-card animate-in" style={{ width: '100%', maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: '2rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '1.5rem',
+            padding: '1.25rem',
+            borderRadius: '1rem',
+            backgroundImage: `linear-gradient(135deg, rgba(8,10,15,0.2) 0%, rgba(8,10,15,0.82) 55%, rgba(8,10,15,0.95) 100%), url('${service.backgroundImage}')`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+            border: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
           <div>
             <div style={{ fontSize: '2rem', marginBottom: '0.25rem' }}>{service.icon}</div>
             <h2 style={{ fontWeight: 700, fontSize: '1.25rem', marginBottom: '0.25rem' }}>Request {service.name}</h2>
-            <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>{service.description}</p>
+            <p style={{ color: '#d7e3f0', fontSize: '0.875rem', maxWidth: 340 }}>{service.description}</p>
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.25rem' }}>
             <X size={20} />

@@ -122,8 +122,11 @@ app.post('/wallet/pay', async (req, res) => {
             body: JSON.stringify({
                 orderId,
                 userId: order.userId,
+                userName: order.userName,
+                userEmail: order.userEmail,
                 serviceId: order.serviceId,
                 serviceName: order.serviceName,
+                description: order.description,
                 amount: order.amount,
                 address: order.address,
                 scheduledDate: order.scheduledDate,

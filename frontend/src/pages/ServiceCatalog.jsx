@@ -81,21 +81,37 @@ export default function ServiceCatalog() {
           <div
             key={service.id}
             className="stat-card"
-            style={{ padding: '1.75rem', display: 'flex', flexDirection: 'column', gap: '0.75rem', cursor: 'default', transition: 'transform 0.2s' }}
+            style={{
+              padding: '1.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+              cursor: 'default',
+              transition: 'transform 0.2s',
+              minHeight: 360,
+              justifyContent: 'space-between',
+              backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${service.backgroundImage}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              overflow: 'hidden',
+            }}
             onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
           >
-            <div style={{ fontSize: '2.5rem' }}>{service.icon}</div>
-            <div>
-              <h3 style={{ fontWeight: 700, marginBottom: '0.25rem', fontSize: '1.1rem' }}>{service.name}</h3>
-              <span style={{ fontSize: '0.75rem', color: '#8b5cf6', background: 'rgba(139,92,246,0.1)', padding: '0.2em 0.7em', borderRadius: '9999px' }}>{service.category}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+              <div style={{ fontSize: '2.5rem', width: 60, height: 60, display: 'grid', placeItems: 'center', borderRadius: 18, background: 'rgba(8, 10, 15, 0.42)', backdropFilter: 'blur(8px)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>{service.icon}</div>
+              <span style={{ fontSize: '0.75rem', color: '#e9d5ff', background: 'rgba(76, 29, 149, 0.35)', padding: '0.35em 0.8em', borderRadius: '9999px', border: '1px solid rgba(196,181,253,0.25)', backdropFilter: 'blur(6px)' }}>{service.category}</span>
             </div>
-            <p style={{ color: '#94a3b8', fontSize: '0.9rem', lineHeight: 1.6, flexGrow: 1 }}>{service.description}</p>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.5rem' }}>
-              <span style={{ color: '#10b981', fontWeight: 700, fontSize: '1rem' }}>From ${service.priceFrom}</span>
+            <div>
+              <h3 style={{ fontWeight: 700, marginBottom: '0.35rem', fontSize: '1.1rem', color: '#f8fafc' }}>{service.name}</h3>
+              <p style={{ color: '#dbe4f0', fontSize: '0.92rem', lineHeight: 1.6 }}>{service.description}</p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', gap: '1rem' }}>
+              <span style={{ color: '#6ee7b7', fontWeight: 700, fontSize: '1rem' }}>From ${service.priceFrom}</span>
               <button
                 className="btn btn-primary"
-                style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+                style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}
                 onClick={() => {
                   if (!user) return navigate('/login');
                   setSelected(service);

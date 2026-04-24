@@ -25,22 +25,32 @@ connectDB();
 const ok = (res, data, status = 200) => res.status(status).json({ success: true, ...data });
 const err = (res, message, status = 400) => res.status(status).json({ success: false, message });
 
+const buildInvoicePayload = (source = {}) => ({
+    orderId: source._id || source.orderId,
+    userId: source.userId,
+    userName: source.userName,
+    userEmail: source.userEmail,
+    serviceId: source.serviceId,
+    serviceName: source.serviceName,
+    description: source.description,
+    amount: Number(source.amount),
+    address: source.address,
+    scheduledDate: source.scheduledDate,
+    paidAt: source.paidAt || source.updatedAt || new Date(),
+});
+
+const invoiceNeedsHydration = (invoice) => {
+    if (!invoice) return false;
+    return !invoice.userName || !invoice.userEmail || !invoice.description;
+};
+
 const createInvoiceFromOrder = async (order) => {
     if (!order) throw new Error('Order payload is required');
 
     const existing = await Invoice.findOne({ orderId: order._id || order.orderId });
     if (existing) return existing;
 
-    return Invoice.create({
-        orderId: order._id || order.orderId,
-        userId: order.userId,
-        serviceId: order.serviceId,
-        serviceName: order.serviceName,
-        amount: Number(order.amount),
-        address: order.address,
-        scheduledDate: order.scheduledDate,
-        paidAt: order.paidAt || order.updatedAt || new Date(),
-    });
+    return Invoice.create(buildInvoicePayload(order));
 };
 
 const fetchOrderById = async (orderId) => {
@@ -77,9 +87,43 @@ const fetchOrderById = async (orderId) => {
     throw error;
 };
 
+const hydrateInvoiceFromOrder = async (invoice, order) => {
+    if (!invoice || !order) return invoice;
+
+    let dirty = false;
+    const updates = {
+        userName: order.userName,
+        userEmail: order.userEmail,
+        description: order.description,
+        serviceName: order.serviceName,
+        address: order.address,
+        scheduledDate: order.scheduledDate,
+    };
+
+    for (const [key, value] of Object.entries(updates)) {
+        if (value && String(invoice[key] || '') !== String(value)) {
+            invoice[key] = value;
+            dirty = true;
+        }
+    }
+
+    if (dirty) await invoice.save();
+    return invoice;
+};
+
 const loadInvoiceForOrder = async (orderId) => {
     let invoice = await Invoice.findOne({ orderId });
-    if (invoice) return invoice;
+    if (invoice && !invoiceNeedsHydration(invoice)) return invoice;
+
+    if (invoice) {
+        try {
+            const order = await fetchOrderById(orderId);
+            return hydrateInvoiceFromOrder(invoice, order);
+        } catch (error) {
+            console.error('[invoice-service] failed to enrich invoice from order:', error.message);
+            return invoice;
+        }
+    }
 
     const order = await fetchOrderById(orderId);
 
@@ -113,28 +157,40 @@ const streamInvoicePdf = (res, invoice) => {
     doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('ORDER ID', 320, 152);
     doc.fillColor('#f1f5f9').fontSize(9).font('Helvetica').text(invoice.orderId, 320, 165, { width: 200 });
 
-    doc.moveTo(50, 240).lineTo(545, 240).strokeColor('#2d2d3d').lineWidth(1).stroke();
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('SERVICE DETAILS', 50, 255);
-    doc.moveTo(50, 268).lineTo(545, 268).strokeColor('#2d2d3d').lineWidth(0.5).stroke();
+    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('BILLED TO', 50, 235);
+    doc.fillColor('#f1f5f9').fontSize(11).font('Helvetica-Bold').text(invoice.userName || 'Customer', 50, 249);
+    doc.fillColor('#cbd5e1').fontSize(9).font('Helvetica').text(invoice.userEmail || '-', 50, 265);
+    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('CUSTOMER ID', 320, 235);
+    doc.fillColor('#f1f5f9').fontSize(10).font('Helvetica').text(invoice.userId || '-', 320, 249, { width: 210 });
+
+    doc.moveTo(50, 295).lineTo(545, 295).strokeColor('#2d2d3d').lineWidth(1).stroke();
+    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('SERVICE DETAILS', 50, 310);
+    doc.moveTo(50, 323).lineTo(545, 323).strokeColor('#2d2d3d').lineWidth(0.5).stroke();
 
     doc.fillColor('#8b5cf6').fontSize(9).font('Helvetica-Bold');
-    doc.text('SERVICE', 50, 280);
-    doc.text('ADDRESS', 220, 280);
-    doc.text('SCHEDULED DATE', 370, 280);
-    doc.text('AMOUNT', 490, 280, { align: 'right' });
-    doc.moveTo(50, 294).lineTo(545, 294).strokeColor('#2d2d3d').lineWidth(0.5).stroke();
+    doc.text('SERVICE', 50, 335);
+    doc.text('ADDRESS', 210, 335);
+    doc.text('SCHEDULED DATE', 370, 335);
+    doc.text('AMOUNT', 490, 335, { align: 'right' });
+    doc.moveTo(50, 349).lineTo(545, 349).strokeColor('#2d2d3d').lineWidth(0.5).stroke();
 
     doc.fillColor('#f1f5f9').fontSize(10).font('Helvetica');
-    doc.text(invoice.serviceName || invoice.serviceId, 50, 306, { width: 160 });
-    doc.text(invoice.address || '-', 220, 306, { width: 140 });
+    doc.text(invoice.serviceName || invoice.serviceId, 50, 361, { width: 150 });
+    doc.text(invoice.address || '-', 210, 361, { width: 145 });
     const schedDate = invoice.scheduledDate ? new Date(invoice.scheduledDate).toLocaleDateString('en-IN') : '-';
-    doc.text(schedDate, 370, 306, { width: 110 });
+    doc.text(schedDate, 370, 361, { width: 110 });
     doc.fillColor('#10b981').fontSize(12).font('Helvetica-Bold');
-    doc.text(`$${Number(invoice.amount).toFixed(2)}`, 490, 304, { align: 'right' });
+    doc.text(`$${Number(invoice.amount).toFixed(2)}`, 490, 359, { align: 'right' });
 
-    doc.rect(350, 340, 195, 55).fill('#1e1e2e');
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('TOTAL AMOUNT PAID', 365, 352);
-    doc.fillColor('#10b981').fontSize(20).font('Helvetica-Bold').text(`$${Number(invoice.amount).toFixed(2)}`, 365, 367);
+    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('SERVICE DESCRIPTION', 50, 405);
+    doc.fillColor('#f1f5f9').fontSize(10).font('Helvetica').text(invoice.description || 'Professional service booking', 50, 419, {
+        width: 495,
+        height: 55,
+    });
+
+    doc.rect(350, 500, 195, 55).fill('#1e1e2e');
+    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('TOTAL AMOUNT PAID', 365, 512);
+    doc.fillColor('#10b981').fontSize(20).font('Helvetica-Bold').text(`$${Number(invoice.amount).toFixed(2)}`, 365, 527);
 
     doc.moveTo(50, 680).lineTo(545, 680).strokeColor('#2d2d3d').lineWidth(1).stroke();
     doc.fillColor('#94a3b8').fontSize(8).font('Helvetica').text('Thank you for using Vaultrix. This is a system-generated invoice.', 50, 692, { align: 'center', width: 495 });
@@ -145,14 +201,14 @@ const streamInvoicePdf = (res, invoice) => {
 
 app.post('/invoices', async (req, res) => {
     try {
-        const { orderId, userId, serviceId, serviceName, amount, address, scheduledDate } = req.body;
+        const { orderId, userId, serviceId, serviceName, amount } = req.body;
         if (!orderId || !userId || !serviceId || !serviceName || !amount)
             return err(res, 'Missing required fields');
 
         const existing = await Invoice.findOne({ orderId });
         if (existing) return ok(res, { invoice: existing });
 
-        const invoice = await Invoice.create({ orderId, userId, serviceId, serviceName, amount, address, scheduledDate });
+        const invoice = await Invoice.create(buildInvoicePayload(req.body));
         ok(res, { invoice }, 201);
     } catch (e) {
         err(res, e.message, 500);
@@ -179,8 +235,16 @@ app.get('/invoices/order/:orderId/download', async (req, res) => {
 
 app.get('/invoices/:id', async (req, res) => {
     try {
-        const invoice = await Invoice.findById(req.params.id);
+        let invoice = await Invoice.findById(req.params.id);
         if (!invoice) return err(res, 'Invoice not found', 404);
+        if (invoiceNeedsHydration(invoice)) {
+            try {
+                const order = await fetchOrderById(invoice.orderId);
+                invoice = await hydrateInvoiceFromOrder(invoice, order);
+            } catch (error) {
+                console.error('[invoice-service] failed to enrich invoice by id:', error.message);
+            }
+        }
         ok(res, { invoice });
     } catch (e) {
         err(res, e.message, 500);
@@ -189,8 +253,16 @@ app.get('/invoices/:id', async (req, res) => {
 
 app.get('/invoices/:id/download', async (req, res) => {
     try {
-        const invoice = await Invoice.findById(req.params.id);
+        let invoice = await Invoice.findById(req.params.id);
         if (!invoice) return err(res, 'Invoice not found', 404);
+        if (invoiceNeedsHydration(invoice)) {
+            try {
+                const order = await fetchOrderById(invoice.orderId);
+                invoice = await hydrateInvoiceFromOrder(invoice, order);
+            } catch (error) {
+                console.error('[invoice-service] failed to enrich invoice PDF payload:', error.message);
+            }
+        }
         streamInvoicePdf(res, invoice);
     } catch (e) {
         console.error('[invoice-service] PDF error:', e.message);
