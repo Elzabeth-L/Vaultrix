@@ -3,9 +3,16 @@ import { X, Calendar, MapPin, FileText, DollarSign } from 'lucide-react';
 import api from '../api';
 import { getCurrentUser } from '../utils/auth';
 
+const getLocalDateTimeMin = () => {
+  const now = new Date();
+  const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+  return localTime.toISOString().slice(0, 16);
+};
+
 export default function RequestServiceModal({ service, onClose, onSuccess }) {
   const user = getCurrentUser();
-  const [form, setForm] = useState({ description: '', address: '', scheduledDate: '', amount: service.priceFrom || '' });
+  const fixedAmount = Number(service.priceFrom) || 0;
+  const [form, setForm] = useState({ description: '', address: '', scheduledDate: '', amount: fixedAmount });
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState('');
 
@@ -14,22 +21,22 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
   const submit = async e => {
     e.preventDefault();
     setError('');
-    if (!user?.id) return setError('Please log in first.');
-    if (!form.description || !form.address || !form.scheduledDate || !form.amount)
+    if (!user?.id || !user?.email || !user?.name) return setError('Please log in again before placing a request.');
+    if (!form.description || !form.address || !form.scheduledDate)
       return setError('All fields are required.');
-    if (Number(form.amount) < service.priceFrom)
-      return setError(`Minimum amount for ${service.name} is ₹${service.priceFrom}.`);
 
     setLoading(true);
     try {
       await api.post('/orders', {
-        userId:       user.id,
-        serviceId:    service.id,
-        serviceName:  service.name,
-        description:  form.description,
-        address:      form.address,
+        userId:        user.id,
+        userName:      user.name,
+        userEmail:     user.email,
+        serviceId:     service.id,
+        serviceName:   service.name,
+        description:   form.description,
+        address:       form.address,
         scheduledDate: form.scheduledDate,
-        amount:       Number(form.amount),
+        amount:        fixedAmount,
       });
       onSuccess?.();
     } catch (err) {
@@ -59,7 +66,7 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
             <textarea
               name="description"
               className="form-control"
-              placeholder="Be specific about your requirements…"
+              placeholder="Be specific about your requirements..."
               rows={3}
               value={form.description}
               onChange={handle}
@@ -73,14 +80,33 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
           </div>
           <div className="form-group">
             <label><Calendar size={14} style={{ marginRight: '0.4rem' }} />Preferred date & time</label>
-            <input name="scheduledDate" type="datetime-local" className="form-control" value={form.scheduledDate} onChange={handle} required
-              min={new Date().toISOString().slice(0, 16)} />
+            <input
+              name="scheduledDate"
+              type="datetime-local"
+              className="form-control"
+              value={form.scheduledDate}
+              onChange={handle}
+              min={getLocalDateTimeMin()}
+              step="60"
+              required
+            />
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem', display: 'block' }}>
+              Choose both a date and time. Past times are not allowed.
+            </span>
           </div>
           <div className="form-group">
-            <label><DollarSign size={14} style={{ marginRight: '0.4rem' }} />Your budget (₹)</label>
-            <input name="amount" type="number" className="form-control" placeholder={`Min ₹${service.priceFrom}`}
-              value={form.amount} onChange={handle} min={service.priceFrom} required />
-            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem', display: 'block' }}>Minimum: ₹{service.priceFrom}</span>
+            <label><DollarSign size={14} style={{ marginRight: '0.4rem' }} />Fixed service amount (Rs)</label>
+            <input
+              name="amount"
+              type="text"
+              className="form-control"
+              value={`Rs ${fixedAmount}`}
+              readOnly
+              aria-readonly="true"
+            />
+            <span style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.35rem', display: 'block' }}>
+              This amount is set by the service and cannot be edited.
+            </span>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1rem' }}>
             <button type="button" className="btn btn-secondary" onClick={onClose} style={{ flex: 1 }}>Cancel</button>

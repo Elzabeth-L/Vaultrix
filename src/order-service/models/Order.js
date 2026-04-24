@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 
 const orderSchema = new mongoose.Schema({
     userId:        { type: String, required: true },
+    userName:      { type: String, trim: true },
+    userEmail:     { type: String, lowercase: true, trim: true },
     serviceId:     { type: String, required: true },
     serviceName:   { type: String, required: true },
     description:   { type: String, required: true },
@@ -18,7 +20,7 @@ const orderSchema = new mongoose.Schema({
         enum: ['UNPAID', 'PAID'],
         default: 'UNPAID'
     },
-    rejectionReason: { type: String },
+    rejectionReason: { type: String, trim: true },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);

@@ -1,6 +1,4 @@
 services:
-  # ── Databases ────────────────────────────────────────────────────────────────
-
   users-db:
     image: mongo:6
     container_name: vaultrix-users-db
@@ -36,8 +34,6 @@ services:
     volumes:
       - review_data:/data/db
 
-  # ── Microservices ─────────────────────────────────────────────────────────────
-
   user-service:
     build: ./src/user-service
     container_name: vaultrix-user-service
@@ -61,8 +57,10 @@ services:
     environment:
       - PORT=3002
       - MONGO_URI=mongodb://orders-db:27017/orders_db
+      - NOTIFICATION_SERVICE_URL=http://notification-service:3007
     depends_on:
       - orders-db
+      - notification-service
 
   wallet-service:
     build: ./src/wallet-service
@@ -106,6 +104,15 @@ services:
       - review-db
       - order-service
 
+  notification-service:
+    build: ./src/notification-service
+    container_name: vaultrix-notification-service
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    env_file:
+      - ./src/notification-service/.env
+
   api-gateway:
     build: ./src/api-gateway
     container_name: vaultrix-api-gateway
@@ -134,8 +141,6 @@ services:
       - "80:80"
     depends_on:
       - api-gateway
-
-# ── Volumes ───────────────────────────────────────────────────────────────────
 
 volumes:
   users_data:

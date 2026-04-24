@@ -9,20 +9,67 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3002;
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://127.0.0.1:3007';
+
 connectDB();
 
 const ok  = (res, data, status = 200) => res.status(status).json({ success: true, ...data });
 const err = (res, message, status = 400) => res.status(status).json({ success: false, message });
 
-// ── POST /orders — User submits a service request ──────────────────────────
+const sendOrderNotification = async (eventType, order) => {
+    if (typeof fetch !== 'function') {
+        return {
+            success: false,
+            message: 'Notification skipped because fetch is not available in this Node runtime.'
+        };
+    }
+
+    try {
+        const response = await fetch(`${NOTIFICATION_SERVICE_URL}/notifications/order-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ eventType, order })
+        });
+
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            return {
+                success: false,
+                message: payload.message || `Notification service returned ${response.status}`
+            };
+        }
+
+        return {
+            success: true,
+            message: payload.message || 'Email sent successfully.'
+        };
+    } catch (error) {
+        return {
+            success: false,
+            message: error.message || 'Notification request failed.'
+        };
+    }
+};
+
+// POST /orders - User submits a service request
 app.post('/orders', async (req, res) => {
     try {
-        const { userId, serviceId, serviceName, description, address, scheduledDate, amount } = req.body;
-        if (!userId || !serviceId || !serviceName || !description || !address || !scheduledDate || !amount)
-            return err(res, 'userId, serviceId, serviceName, description, address, scheduledDate, and amount are required');
+        const {
+            userId, userName, userEmail,
+            serviceId, serviceName, description, address, scheduledDate, amount
+        } = req.body;
+
+        if (!userId || !userName || !userEmail || !serviceId || !serviceName || !description || !address || !scheduledDate || !amount)
+            return err(res, 'userId, userName, userEmail, serviceId, serviceName, description, address, scheduledDate, and amount are required');
 
         const order = await Order.create({
-            userId, serviceId, serviceName, description, address,
+            userId,
+            userName,
+            userEmail: userEmail.toLowerCase(),
+            serviceId,
+            serviceName,
+            description,
+            address,
             scheduledDate: new Date(scheduledDate),
             amount: Number(amount)
         });
@@ -30,18 +77,18 @@ app.post('/orders', async (req, res) => {
     } catch (e) { err(res, e.message, 500); }
 });
 
-// ── GET /orders — Query orders (userId, status, providerId filter) ──────────
+// GET /orders - Query orders (userId, status filter)
 app.get('/orders', async (req, res) => {
     try {
         const filter = {};
-        if (req.query.userId)  filter.userId  = req.query.userId;
-        if (req.query.status)  filter.status  = req.query.status;
+        if (req.query.userId) filter.userId = req.query.userId;
+        if (req.query.status) filter.status = req.query.status;
         const orders = await Order.find(filter).sort({ createdAt: -1 });
         ok(res, { orders });
     } catch (e) { err(res, e.message, 500); }
 });
 
-// ── GET /orders/:id — Single order ─────────────────────────────────────────
+// GET /orders/:id - Single order
 app.get('/orders/:id', async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
@@ -50,32 +97,53 @@ app.get('/orders/:id', async (req, res) => {
     } catch (e) { err(res, e.message, 400); }
 });
 
-// ── PATCH /orders/:id/approve — Admin approves ─────────────────────────────
+// PATCH /orders/:id/approve - Admin approves
 app.patch('/orders/:id/approve', async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) return err(res, 'Order not found', 404);
         if (order.status !== 'PENDING') return err(res, `Cannot approve an order with status ${order.status}`);
+
         order.status = 'APPROVED';
         await order.save();
-        ok(res, { order });
+
+        const notification = await sendOrderNotification('APPROVED', order.toObject());
+        ok(res, {
+            order,
+            notification,
+            message: notification.success
+                ? 'Order approved and email sent.'
+                : `Order approved, but email could not be sent: ${notification.message}`
+        });
     } catch (e) { err(res, e.message, 500); }
 });
 
-// ── PATCH /orders/:id/reject — Admin rejects ──────────────────────────────
+// PATCH /orders/:id/reject - Admin rejects
 app.patch('/orders/:id/reject', async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) return err(res, 'Order not found', 404);
         if (order.status !== 'PENDING') return err(res, `Cannot reject an order with status ${order.status}`);
+
+        const reason = req.body.reason?.trim();
+        if (!reason) return err(res, 'A rejection reason is required.');
+
         order.status = 'REJECTED';
-        order.rejectionReason = req.body.reason || '';
+        order.rejectionReason = reason;
         await order.save();
-        ok(res, { order });
+
+        const notification = await sendOrderNotification('REJECTED', order.toObject());
+        ok(res, {
+            order,
+            notification,
+            message: notification.success
+                ? 'Order rejected and apology email sent.'
+                : `Order rejected, but email could not be sent: ${notification.message}`
+        });
     } catch (e) { err(res, e.message, 500); }
 });
 
-// ── PATCH /orders/:id/pay — Internal: wallet-service calls this after payment
+// PATCH /orders/:id/pay - Internal: wallet-service calls this after payment
 app.patch('/orders/:id/pay', async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
@@ -88,16 +156,25 @@ app.patch('/orders/:id/pay', async (req, res) => {
     } catch (e) { err(res, e.message, 500); }
 });
 
-// ── PATCH /orders/:id/complete — Admin marks complete ─────────────────────
+// PATCH /orders/:id/complete - Admin marks complete
 app.patch('/orders/:id/complete', async (req, res) => {
     try {
         const order = await Order.findById(req.params.id);
         if (!order) return err(res, 'Order not found', 404);
         if (order.status !== 'APPROVED') return err(res, 'Order must be APPROVED to complete');
         if (order.paymentStatus !== 'PAID') return err(res, 'Order must be PAID before marking complete');
+
         order.status = 'COMPLETED';
         await order.save();
-        ok(res, { order });
+
+        const notification = await sendOrderNotification('COMPLETED', order.toObject());
+        ok(res, {
+            order,
+            notification,
+            message: notification.success
+                ? 'Order marked complete and follow-up email sent.'
+                : `Order marked complete, but email could not be sent: ${notification.message}`
+        });
     } catch (e) { err(res, e.message, 500); }
 });
 
