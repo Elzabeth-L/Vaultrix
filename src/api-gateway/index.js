@@ -12,11 +12,11 @@ app.use(morgan('dev'));
 
 // Service routing map — prefix (Gateway) → target base URL (Microservice)
 const services = {
-    '/api/users':    process.env.USER_SERVICE_URL    || 'http://user-service:3001',
-    '/api/orders':   process.env.ORDER_SERVICE_URL   || 'http://order-service:3002',
-    '/api/wallet':   process.env.WALLET_SERVICE_URL  || 'http://wallet-service:3003',
-    '/api/invoices': process.env.INVOICE_SERVICE_URL || 'http://invoice-service:3005',
-    '/api/reviews':  process.env.REVIEW_SERVICE_URL  || 'http://review-service:3006',
+    '/api/users':    process.env.USER_SERVICE_URL    || 'http://localhost:3001',
+    '/api/orders':   process.env.ORDER_SERVICE_URL   || 'http://localhost:3002',
+    '/api/wallet':   process.env.WALLET_SERVICE_URL  || 'http://localhost:3003',
+    '/api/invoices': process.env.INVOICE_SERVICE_URL || 'http://localhost:3005',
+    '/api/reviews':  process.env.REVIEW_SERVICE_URL  || 'http://localhost:3006',
 };
 
 for (const [prefix, target] of Object.entries(services)) {

@@ -12,7 +12,7 @@ app.use(express.json());
 
 const PORT       = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'vaultrix-super-secret-key';
-const WALLET_URL = process.env.WALLET_SERVICE_URL || 'http://wallet-service:3003';
+const WALLET_URL = process.env.WALLET_SERVICE_URL || 'http://127.0.0.1:3003';
 
 connectDB();
 
@@ -26,16 +26,15 @@ const verifyToken = (req, res, next) => {
     catch { return err(res, 'Unauthorized', 401); }
 };
 
-// ── Register (public, USER/PROVIDER only) ──────────────────────────────────
+// Register (public, USER/PROVIDER only)
 app.post('/users/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
         let { role } = req.body;
-        
-        // Convert to uppercase and validate
+
         if (role) role = role.toUpperCase();
         if (!['USER', 'PROVIDER'].includes(role)) role = 'USER';
-        
+
         if (!name || !email || !password)
             return err(res, 'name, email and password are required');
         if (await User.findOne({ email: email.toLowerCase() }))
@@ -43,29 +42,32 @@ app.post('/users/register', async (req, res) => {
 
         const user = await new User({ name, email, password: await bcrypt.hash(password, 10), role }).save();
 
-        // Auto-create wallet (non-blocking)
-        fetch(`${WALLET_URL}/wallet/create`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: user._id.toString() })
-        }).catch(e => console.error('[user-service] wallet auto-create failed:', e.message));
+        // Auto-create wallet without blocking registration.
+        if (typeof fetch === 'function') {
+            fetch(`${WALLET_URL}/wallet/create`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: user._id.toString() })
+            }).catch(e => console.error('[user-service] wallet auto-create failed:', e.message));
+        } else {
+            console.warn('[user-service] wallet auto-create skipped: fetch is not available in this Node runtime');
+        }
 
         ok(res, { message: 'Registered successfully', userId: user._id }, 201);
-    } catch (e) { 
+    } catch (e) {
         if (e.name === 'ValidationError') {
             const messages = Object.values(e.errors).map(val => val.message);
             return err(res, messages.join(', '));
         }
-        err(res, e.message); 
+        err(res, e.message);
     }
 });
 
-// ── Login ──────────────────────────────────────────────────────────────────────
+// Login
 app.post('/users/login', async (req, res) => {
     try {
         const { email, password } = req.body;
 
-        // Hardcoded admin account (never stored in DB, cannot be registered)
         const ADMIN_EMAIL    = 'admin@vaultrix.io';
         const ADMIN_PASSWORD = 'Admin@Vaultrix123!';
         if (email?.toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
@@ -84,7 +86,7 @@ app.post('/users/login', async (req, res) => {
     } catch (e) { err(res, e.message, 500); }
 });
 
-// ── Profile ────────────────────────────────────────────────────────────────────
+// Profile
 app.get('/users/profile', verifyToken, async (req, res) => {
     try {
         const user = await User.findById(req.user.id).select('-password');

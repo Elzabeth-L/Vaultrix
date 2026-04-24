@@ -1,6 +1,13 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api' });
+const configuredGatewayUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') || '';
+const baseURL = !configuredGatewayUrl
+  ? '/api'
+  : configuredGatewayUrl.endsWith('/api')
+    ? configuredGatewayUrl
+    : `${configuredGatewayUrl}/api`;
+
+const api = axios.create({ baseURL });
 
 // Attach JWT on every request automatically
 api.interceptors.request.use((config) => {
