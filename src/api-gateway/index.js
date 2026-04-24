@@ -10,36 +10,44 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(morgan('dev'));
 
-// Routing map
-// Routing map
+// Service routing map — prefix → target base URL
 const services = {
-    '/users': 'http://127.0.0.1:3001'
+    '/users':        process.env.USER_SERVICE_URL        || 'http://user-service:3001',
+    '/orders':       process.env.ORDER_SERVICE_URL       || 'http://order-service:3002',
+    '/wallet':       process.env.WALLET_SERVICE_URL      || 'http://wallet-service:3003',
+    '/transactions': process.env.TRANSACTION_SERVICE_URL || 'http://transaction-service:3004',
+    '/ledger':       process.env.LEDGER_SERVICE_URL      || 'http://ledger-service:3005',
 };
-for (const [path, target] of Object.entries(services)) {
-    app.use(path, createProxyMiddleware({
-        target,
-        changeOrigin: true,
 
-        pathRewrite: (pathReq, req) => {
-            return path + pathReq; // 🔥 reattach /users
-        },
+for (const [prefix, target] of Object.entries(services)) {
+    app.use(
+        prefix,
+        createProxyMiddleware({
+            target,
+            changeOrigin: true,
 
-        logLevel: 'debug',
+            // When Express mounts on `/users`, it strips that prefix before
+            // calling the middleware. pathReq here is already relative
+            // (e.g. "/" or "/:id"), so we just reattach the original prefix.
+            pathRewrite: (pathReq) => `${prefix}${pathReq}`,
 
-        onProxyReq: (proxyReq, req, res) => {
-            console.log(`FORWARDING TO: ${target}${path}${req.url}`);
-        },
-
-        onError: (err, req, res) => {
-            console.error('Proxy Error:', err.message);
-            res.status(500).json({ error: 'Gateway error' });
-        }
-    }));
+            on: {
+                proxyReq: (proxyReq, req) => {
+                    console.log(`[GW] ${req.method} ${prefix}${req.url} → ${target}`);
+                },
+                error: (err, req, res) => {
+                    console.error('[GW] Proxy error:', err.message);
+                    res.status(502).json({ error: 'Bad gateway', detail: err.message });
+                },
+            },
+        })
+    );
 }
 
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
 
-app.listen(PORT, () => {
-    console.log(`API Gateway is running on port ${PORT}`);
+// Bind to 0.0.0.0 so Docker exposes the port correctly
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`API Gateway running on port ${PORT}`);
 });
