@@ -1,7 +1,7 @@
 require('dotenv').config();
+const connectDB = require('./config/db');
 const express = require('express');
 const mongoose = require('mongoose');
-const redis = require('redis');
 const cors = require('cors');
 const axios = require('axios');
 const Transaction = require('./models/Transaction');
@@ -11,22 +11,14 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3004;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27020/transaction_db';
-const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
 // Service URLs for inter-service communication
 const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || 'http://localhost:3002';
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
 const WALLET_SERVICE_URL = process.env.WALLET_SERVICE_URL || 'http://localhost:3003';
+const LEDGER_SERVICE_URL = process.env.LEDGER_SERVICE_URL || 'http://localhost:3005';
 
-mongoose.connect(MONGO_URI)
-    .then(() => console.log('Connected to Transaction MongoDB'))
-    .catch(err => console.error('Failed to connect to MongoDB', err));
-
-const redisPublisher = redis.createClient({ url: REDIS_URL });
-redisPublisher.connect()
-    .then(() => console.log('Connected to Redis Publisher'))
-    .catch(err => console.error('Redis connection error', err));
+connectDB();
 
 app.post('/transactions/execute', async (req, res) => {
     const { orderId } = req.body;
@@ -105,16 +97,20 @@ app.post('/transactions/execute', async (req, res) => {
         transaction.status = 'SUCCESS';
         await transaction.save();
 
-        // 6. Publish event "transaction.completed"
-        const eventPayload = JSON.stringify({
+        // 6. Notify Ledger Service
+        const eventPayload = {
             transactionId: transaction._id,
             orderId,
             clientId,
             providerId,
             amount,
             timestamp: new Date()
-        });
-        await redisPublisher.publish('transaction.completed', eventPayload);
+        };
+        try {
+            await axios.post(`${LEDGER_SERVICE_URL}/ledger/log`, eventPayload);
+        } catch (err) {
+            console.error('Failed to notify ledger service', err.message);
+        }
 
         res.status(200).json(transaction);
 
