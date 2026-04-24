@@ -60,26 +60,75 @@ app.post('/wallet/fund', async (req, res) => {
 
 app.patch('/wallet/update', async (req, res) => {
     try {
-        // Internal endpoint for deductions and credits by transaction service
-        const { userId, amount } = req.body; // positive for credit, negative for debit
+        const { userId, amount } = req.body;
         const wallet = await Wallet.findOne({ userId });
         if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
-
-        if (wallet.balance + amount < 0) {
-            return res.status(400).json({ error: 'Insufficient funds' });
-        }
-
+        if (wallet.balance + amount < 0) return res.status(400).json({ error: 'Insufficient funds' });
         wallet.balance += amount;
         await wallet.save();
-
         res.status(200).json(wallet);
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
 });
 
+// ── POST /wallet/pay — Pay for an approved order ───────────────────────────
+// Orchestrates: deduct wallet → mark order PAID → create invoice
+app.post('/wallet/pay', async (req, res) => {
+    try {
+        const { userId, orderId } = req.body;
+        if (!userId || !orderId) return res.status(400).json({ error: 'userId and orderId are required' });
+
+        const ORDER_URL   = process.env.ORDER_SERVICE_URL   || 'http://order-service:3002';
+        const INVOICE_URL = process.env.INVOICE_SERVICE_URL || 'http://invoice-service:3005';
+
+        // 1. Fetch the order
+        const orderRes = await fetch(`${ORDER_URL}/orders/${orderId}`);
+        if (!orderRes.ok) return res.status(404).json({ error: 'Order not found' });
+        const { order } = await orderRes.json();
+
+        if (order.status !== 'APPROVED')
+            return res.status(400).json({ error: 'Order must be APPROVED before payment' });
+        if (order.paymentStatus === 'PAID')
+            return res.status(400).json({ error: 'Order already paid' });
+        if (String(order.userId) !== String(userId))
+            return res.status(403).json({ error: 'You can only pay for your own orders' });
+
+        // 2. Deduct from wallet
+        const wallet = await Wallet.findOne({ userId });
+        if (!wallet) return res.status(404).json({ error: 'Wallet not found' });
+        if (wallet.balance < order.amount) return res.status(400).json({ error: 'Insufficient funds' });
+        wallet.balance -= order.amount;
+        await wallet.save();
+
+        // 3. Mark order as paid (fire-and-forget tolerated, but we await for consistency)
+        await fetch(`${ORDER_URL}/orders/${orderId}/pay`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
+
+        // 4. Create invoice
+        const invoiceRes = await fetch(`${INVOICE_URL}/invoices`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                orderId,
+                userId:      order.userId,
+                serviceId:   order.serviceId,
+                serviceName: order.serviceName,
+                amount:      order.amount,
+                address:     order.address,
+                scheduledDate: order.scheduledDate,
+            })
+        });
+        const invoice = invoiceRes.ok ? await invoiceRes.json() : null;
+
+        res.status(200).json({ message: 'Payment successful', wallet, invoice });
+    } catch (error) {
+        console.error('[wallet-service] /wallet/pay error:', error.message);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'wallet-service', timestamp: new Date().toISOString() }));
 
-app.listen(PORT, () => {
-    console.log(`Wallet Service running on port ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[wallet-service] running on port ${PORT}`);
 });

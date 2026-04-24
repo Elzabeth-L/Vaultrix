@@ -57,8 +57,7 @@ export default function Register() {
           <div className="form-group">
             <label htmlFor="role">I want to</label>
             <select id="role" name="role" className="form-control" value={form.role} onChange={handle}>
-              <option value="USER">Request services (User)</option>
-              <option value="PROVIDER">Provide services (Provider)</option>
+              <option value="USER">User — request services</option>
             </select>
           </div>
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>

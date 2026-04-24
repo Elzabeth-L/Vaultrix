@@ -19,8 +19,8 @@ export default function Login() {
       const res = await api.post('/users/login', form);
       localStorage.setItem('token', res.data.token);
       localStorage.setItem('user',  JSON.stringify(res.data.user));
-      const r = res.data.user.role ? res.data.user.role.toLowerCase() : 'user';
-      navigate(`/dashboard/${r}`);
+      const role = res.data.user.role ? res.data.user.role.toLowerCase() : 'user';
+      navigate(`/dashboard/${role}`);
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.');
     } finally { setLoading(false); }

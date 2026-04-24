@@ -1,18 +1,20 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import Landing           from './pages/Landing';
-import Login             from './pages/Login';
-import Register          from './pages/Register';
-import UserDashboard     from './pages/UserDashboard';
-import ProviderDashboard from './pages/ProviderDashboard';
-import ProtectedRoute    from './ProtectedRoute';
+import Landing          from './pages/Landing';
+import Login            from './pages/Login';
+import Register         from './pages/Register';
+import UserDashboard    from './pages/UserDashboard';
+import AdminDashboard   from './pages/AdminDashboard';
+import ServiceCatalog   from './pages/ServiceCatalog';
+import ProtectedRoute   from './ProtectedRoute';
+import { getCurrentUser } from './utils/auth';
 
-/** Redirect /dashboard to the role-specific sub-route */
 function DashboardRedirect() {
-  const user = (() => { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; } })();
+  const user  = getCurrentUser() || {};
   const token = localStorage.getItem('token');
   if (!token) return <Navigate to="/login" replace />;
-  return <Navigate to={`/dashboard/${user.role ? user.role.toLowerCase() : 'user'}`} replace />;
+  const role  = user.role ? user.role.toLowerCase() : 'user';
+  return <Navigate to={`/dashboard/${role}`} replace />;
 }
 
 export default function App() {
@@ -21,19 +23,19 @@ export default function App() {
       <Route path="/"         element={<Landing />} />
       <Route path="/login"    element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/services" element={<ServiceCatalog />} />
 
-      {/* Generic /dashboard → role-based redirect */}
       <Route path="/dashboard" element={<DashboardRedirect />} />
 
-      {/* Role-gated dashboards */}
       <Route path="/dashboard/user" element={
         <ProtectedRoute allowedRoles={['USER']}>
           <UserDashboard />
         </ProtectedRoute>
       } />
-      <Route path="/dashboard/provider" element={
-        <ProtectedRoute allowedRoles={['PROVIDER']}>
-          <ProviderDashboard />
+
+      <Route path="/dashboard/admin" element={
+        <ProtectedRoute allowedRoles={['ADMIN']}>
+          <AdminDashboard />
         </ProtectedRoute>
       } />
 

@@ -64,6 +64,18 @@ app.post('/users/register', async (req, res) => {
 app.post('/users/login', async (req, res) => {
     try {
         const { email, password } = req.body;
+
+        // Hardcoded admin account (never stored in DB, cannot be registered)
+        const ADMIN_EMAIL    = 'admin@vaultrix.io';
+        const ADMIN_PASSWORD = 'Admin@Vaultrix123!';
+        if (email?.toLowerCase() === ADMIN_EMAIL && password === ADMIN_PASSWORD) {
+            const token = jwt.sign({ id: 'admin', role: 'ADMIN' }, JWT_SECRET, { expiresIn: '1d' });
+            return ok(res, {
+                token,
+                user: { id: 'admin', name: 'Vaultrix Admin', email: ADMIN_EMAIL, role: 'ADMIN' }
+            });
+        }
+
         const user = await User.findOne({ email: email?.toLowerCase() });
         if (!user || !(await bcrypt.compare(password, user.password)))
             return err(res, 'Invalid email or password', 401);

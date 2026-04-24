@@ -5,8 +5,6 @@ services:
     image: mongo:6
     container_name: vaultrix-users-db
     restart: unless-stopped
-    ports:
-      - "27017:27017"
     volumes:
       - users_data:/data/db
 
@@ -14,8 +12,6 @@ services:
     image: mongo:6
     container_name: vaultrix-orders-db
     restart: unless-stopped
-    ports:
-      - "27018:27017"
     volumes:
       - orders_data:/data/db
 
@@ -23,46 +19,22 @@ services:
     image: mongo:6
     container_name: vaultrix-wallet-db
     restart: unless-stopped
-    ports:
-      - "27019:27017"
     volumes:
       - wallet_data:/data/db
 
-  transaction-db:
+  invoice-db:
     image: mongo:6
-    container_name: vaultrix-transaction-db
+    container_name: vaultrix-invoice-db
     restart: unless-stopped
-    ports:
-      - "27020:27017"
     volumes:
-      - transaction_data:/data/db
+      - invoice_data:/data/db
 
-  ledger-db:
+  review-db:
     image: mongo:6
-    container_name: vaultrix-ledger-db
+    container_name: vaultrix-review-db
     restart: unless-stopped
-    ports:
-      - "27021:27017"
     volumes:
-      - ledger_data:/data/db
-
-  booking-db:
-    image: mongo:6
-    container_name: vaultrix-booking-db
-    restart: unless-stopped
-    ports:
-      - "27022:27017"
-    volumes:
-      - booking_data:/data/db
-
-  marketplace-db:
-    image: mongo:6
-    container_name: vaultrix-marketplace-db
-    restart: unless-stopped
-    ports:
-      - "27023:27017"
-    volumes:
-      - marketplace_data:/data/db
+      - review_data:/data/db
 
   # ── Microservices ─────────────────────────────────────────────────────────────
 
@@ -101,64 +73,38 @@ services:
     environment:
       - PORT=3003
       - MONGO_URI=mongodb://wallet-db:27017/wallet_db
+      - ORDER_SERVICE_URL=http://order-service:3002
+      - INVOICE_SERVICE_URL=http://invoice-service:3005
     depends_on:
       - wallet-db
-
-  transaction-service:
-    build: ./src/transaction-service
-    container_name: vaultrix-transaction-service
-    restart: unless-stopped
-    ports:
-      - "3004:3004"
-    environment:
-      - PORT=3004
-      - MONGO_URI=mongodb://transaction-db:27017/transaction_db
-      - ORDER_SERVICE_URL=http://order-service:3002
-      - USER_SERVICE_URL=http://user-service:3001
-      - WALLET_SERVICE_URL=http://wallet-service:3003
-      - LEDGER_SERVICE_URL=http://ledger-service:3005
-    depends_on:
-      - transaction-db
       - order-service
-      - user-service
-      - wallet-service
-      - ledger-service
+      - invoice-service
 
-  ledger-service:
-    build: ./src/ledger-service
-    container_name: vaultrix-ledger-service
+  invoice-service:
+    build: ./src/invoice-service
+    container_name: vaultrix-invoice-service
     restart: unless-stopped
     ports:
       - "3005:3005"
     environment:
       - PORT=3005
-      - MONGO_URI=mongodb://ledger-db:27017/ledger_db
+      - MONGO_URI=mongodb://invoice-db:27017/invoice_db
     depends_on:
-      - ledger-db
+      - invoice-db
 
-  booking-service:
-    build: ./src/booking-service
-    container_name: vaultrix-booking-service
+  review-service:
+    build: ./src/review-service
+    container_name: vaultrix-review-service
     restart: unless-stopped
     ports:
       - "3006:3006"
     environment:
       - PORT=3006
-      - MONGO_URI=mongodb://booking-db:27017/booking_db
+      - MONGO_URI=mongodb://review-db:27017/review_db
+      - ORDER_SERVICE_URL=http://order-service:3002
     depends_on:
-      - booking-db
-
-  marketplace-service:
-    build: ./src/marketplace-service
-    container_name: vaultrix-marketplace-service
-    restart: unless-stopped
-    ports:
-      - "3007:3007"
-    environment:
-      - PORT=3007
-      - MONGO_URI=mongodb://marketplace-db:27017/marketplace_db
-    depends_on:
-      - marketplace-db
+      - review-db
+      - order-service
 
   api-gateway:
     build: ./src/api-gateway
@@ -171,18 +117,14 @@ services:
       - USER_SERVICE_URL=http://user-service:3001
       - ORDER_SERVICE_URL=http://order-service:3002
       - WALLET_SERVICE_URL=http://wallet-service:3003
-      - TRANSACTION_SERVICE_URL=http://transaction-service:3004
-      - LEDGER_SERVICE_URL=http://ledger-service:3005
-      - BOOKING_SERVICE_URL=http://booking-service:3006
-      - MARKETPLACE_SERVICE_URL=http://marketplace-service:3007
+      - INVOICE_SERVICE_URL=http://invoice-service:3005
+      - REVIEW_SERVICE_URL=http://review-service:3006
     depends_on:
       - user-service
       - order-service
       - wallet-service
-      - transaction-service
-      - ledger-service
-      - booking-service
-      - marketplace-service
+      - invoice-service
+      - review-service
 
   frontend:
     build: ./frontend
@@ -199,7 +141,5 @@ volumes:
   users_data:
   orders_data:
   wallet_data:
-  transaction_data:
-  ledger_data:
-  booking_data:
-  marketplace_data:
+  invoice_data:
+  review_data:
