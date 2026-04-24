@@ -1,4 +1,5 @@
 require('dotenv').config();
+const connectDB = require('./config/db');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,11 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3005;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27021/ledger_db';
 
-mongoose.connect(MONGO_URI)
-    .then(() => console.log('Connected to Ledger MongoDB'))
-    .catch(err => console.error('Failed to connect to MongoDB', err));
+connectDB();
 
 app.post('/ledger/log', async (req, res) => {
     try {

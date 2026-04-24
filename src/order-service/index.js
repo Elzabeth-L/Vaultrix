@@ -1,4 +1,5 @@
 require('dotenv').config();
+const connectDB = require('./config/db');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,11 +10,8 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3002;
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27018/orders_db';
 
-mongoose.connect(MONGO_URI)
-    .then(() => console.log('Connected to Order MongoDB'))
-    .catch(err => console.error('Failed to connect to MongoDB', err));
+connectDB();
 
 app.post('/orders', async (req, res) => {
     try {

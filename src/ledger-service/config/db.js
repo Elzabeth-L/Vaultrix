@@ -3,9 +3,9 @@ const mongoose = require('mongoose');
 const connectDB = async () => {
   try {
     await mongoose.connect(process.env.MONGO_URI);
-    console.log('user-service DB connected');
+    console.log('ledger-service DB connected');
   } catch (error) {
-    console.error('user-service DB error:', error.message);
+    console.error('ledger-service DB error:', error.message);
     process.exit(1);
   }
 };

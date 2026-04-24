@@ -42,12 +42,13 @@ services:
     volumes:
       - ledger_data:/data/db
 
-  # Redis Cache & Pub/Sub
-  redis:
-    image: redis:7-alpine
-    container_name: vaultrix-redis
+  booking-db:
+    image: mongo:6
+    container_name: vaultrix-booking-db
     ports:
-      - "6379:6379"
+      - "27022:27017"
+    volumes:
+      - booking_data:/data/db
 
   # Microservices
   user-service:
@@ -58,6 +59,7 @@ services:
     environment:
       - PORT=3001
       - MONGO_URI=mongodb://users-db:27017/users_db
+      - JWT_SECRET=vaultrix-super-secret-key
     depends_on:
       - users-db
 
@@ -80,10 +82,8 @@ services:
     environment:
       - PORT=3003
       - MONGO_URI=mongodb://wallet-db:27017/wallet_db
-      - REDIS_URL=redis://redis:6379
     depends_on:
       - wallet-db
-      - redis
 
   transaction-service:
     build: ./src/transaction-service
@@ -93,13 +93,12 @@ services:
     environment:
       - PORT=3004
       - MONGO_URI=mongodb://transaction-db:27017/transaction_db
-      - REDIS_URL=redis://redis:6379
       - ORDER_SERVICE_URL=http://order-service:3002
       - USER_SERVICE_URL=http://user-service:3001
       - WALLET_SERVICE_URL=http://wallet-service:3003
+      - LEDGER_SERVICE_URL=http://ledger-service:3005
     depends_on:
       - transaction-db
-      - redis
       - order-service
       - user-service
       - wallet-service
@@ -112,10 +111,19 @@ services:
     environment:
       - PORT=3005
       - MONGO_URI=mongodb://ledger-db:27017/ledger_db
-      - REDIS_URL=redis://redis:6379
     depends_on:
       - ledger-db
-      - redis
+
+  booking-service:
+    build: ./src/booking-service
+    container_name: vaultrix-booking-service
+    ports:
+      - "3006:3006"
+    environment:
+      - PORT=3006
+      - MONGO_URI=mongodb://booking-db:27017/booking_db
+    depends_on:
+      - booking-db
 
   api-gateway:
     build: ./src/api-gateway
@@ -150,3 +158,4 @@ volumes:
   wallet_data:
   transaction_data:
   ledger_data:
+  booking_data:
