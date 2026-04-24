@@ -4,60 +4,58 @@ import { Activity } from 'lucide-react';
 import api from '../api';
 
 export default function Login() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [form,  setForm]  = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = async (e) => {
+  const handle = e => setForm(f => ({ ...f, [e.target.name]: e.target.value }));
+
+  const submit = async e => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
-      const res = await api.post('/users/login', { email, password });
+      const res = await api.post('/users/login', form);
       localStorage.setItem('token', res.data.token);
-      localStorage.setItem('user', JSON.stringify(res.data.user));
-      navigate('/dashboard');
+      localStorage.setItem('user',  JSON.stringify(res.data.user));
+      navigate(`/dashboard/${res.data.user.role}`);
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed');
-    }
+      setError(err.response?.data?.message || 'Login failed. Please try again.');
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="auth-wrapper">
-      <div className="auth-card">
-        <h1 className="title" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
-          <Activity size={28} /> Vaultrix
-        </h1>
-        <h2 className="subtitle" style={{ textAlign: 'center', marginBottom: '2rem' }}>Sign in to your account</h2>
-        
-        {error && <div className="badge badge-success" style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'var(--danger)', width: '100%', textAlign: 'center', marginBottom: '1rem', padding: '0.5rem' }}>{error}</div>}
-        
-        <form onSubmit={handleLogin}>
+      <div className="auth-card animate-in">
+        <div className="auth-logo">
+          <Activity size={24} />
+          Vaultrix
+        </div>
+        <h1 className="auth-heading">Welcome back</h1>
+        <p className="auth-sub">Sign in to your account to continue</p>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        <form onSubmit={submit}>
           <div className="form-group">
-            <label>Email</label>
-            <input 
-              type="email" 
-              className="form-control" 
-              value={email} 
-              onChange={e => setEmail(e.target.value)} 
-              required 
-              placeholder="Enter your email"
-            />
+            <label htmlFor="email">Email address</label>
+            <input id="email" name="email" type="email" className="form-control"
+              placeholder="you@example.com" value={form.email} onChange={handle} required />
           </div>
           <div className="form-group">
-            <label>Password</label>
-            <input 
-              type="password" 
-              className="form-control" 
-              value={password} 
-              onChange={e => setPassword(e.target.value)} 
-              required 
-              placeholder="Enter your password"
-            />
+            <label htmlFor="password">Password</label>
+            <input id="password" name="password" type="password" className="form-control"
+              placeholder="••••••••" value={form.password} onChange={handle} required />
           </div>
-          <button type="submit" className="btn btn-primary">Sign In</button>
+          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
+            {loading ? <span className="spinner" /> : 'Sign in'}
+          </button>
         </form>
-        
-        <Link to="/register" className="auth-link">Don't have an account? Register here</Link>
+
+        <Link to="/register" className="auth-link">
+          Don't have an account? <span>Create one</span>
+        </Link>
       </div>
     </div>
   );

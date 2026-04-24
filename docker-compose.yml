@@ -76,6 +76,7 @@ services:
       - PORT=3001
       - MONGO_URI=mongodb://users-db:27017/users_db
       - JWT_SECRET=vaultrix-super-secret-key
+      - WALLET_SERVICE_URL=http://wallet-service:3003
     depends_on:
       - users-db
 
