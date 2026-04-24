@@ -1,22 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import axios from 'axios';
-import { Activity } from 'lucide-react';
-
-const API_GATEWAY = 'http://localhost:3000';
+import api from '../api';
 
 export default function Register() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState('client');
+  const [role, setRole] = useState('user');
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${API_GATEWAY}/users/register`, { name, email, password, role });
+      await api.post('/users/register', { name, email, password, role });
       navigate('/login');
     } catch (err) {
       setError(err.response?.data?.error || 'Registration failed');
@@ -70,8 +67,8 @@ export default function Register() {
           <div className="form-group">
             <label>Role</label>
             <select className="form-control" value={role} onChange={e => setRole(e.target.value)}>
-              <option value="client">Client</option>
-              <option value="provider">Provider</option>
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
             </select>
           </div>
           <button type="submit" className="btn btn-primary">Register</button>

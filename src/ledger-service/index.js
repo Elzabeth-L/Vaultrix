@@ -55,7 +55,7 @@ app.get('/ledger/:userId', async (req, res) => {
     }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'ledger-service' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'ledger-service', timestamp: new Date().toISOString() }));
 
 app.listen(PORT, () => {
     console.log(`Ledger Service running on port ${PORT}`);

@@ -13,10 +13,10 @@ app.use(express.json());
 const PORT = process.env.PORT || 3004;
 
 // Service URLs for inter-service communication
-const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || 'http://localhost:3002';
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
-const WALLET_SERVICE_URL = process.env.WALLET_SERVICE_URL || 'http://localhost:3003';
-const LEDGER_SERVICE_URL = process.env.LEDGER_SERVICE_URL || 'http://localhost:3005';
+const ORDER_SERVICE_URL  = process.env.ORDER_SERVICE_URL  || 'http://order-service:3002';
+const USER_SERVICE_URL   = process.env.USER_SERVICE_URL   || 'http://user-service:3001';
+const WALLET_SERVICE_URL = process.env.WALLET_SERVICE_URL || 'http://wallet-service:3003';
+const LEDGER_SERVICE_URL = process.env.LEDGER_SERVICE_URL || 'http://ledger-service:3005';
 
 connectDB();
 
@@ -120,7 +120,7 @@ app.post('/transactions/execute', async (req, res) => {
     }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'transaction-service' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'transaction-service', timestamp: new Date().toISOString() }));
 
 app.listen(PORT, () => {
     console.log(`Transaction Service running on port ${PORT}`);

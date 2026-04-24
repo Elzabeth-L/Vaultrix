@@ -7,11 +7,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 3005;
+const PORT = process.env.PORT || 3007;
 
 connectDB();
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'marketplace-service' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'marketplace-service', timestamp: new Date().toISOString() }));
 
 app.listen(PORT, () => {
     console.log(`Marketplace Service running on port ${PORT}`);

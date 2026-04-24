@@ -68,7 +68,9 @@ app.get('/users/profile', verifyToken, async (req, res) => {
 app.post('/users', async (req, res) => {
     try {
         const { name, email, role } = req.body;
-        const user = new User({ name, email, role });
+        // Legacy route: generate a placeholder password since schema requires it
+        const placeholder = await bcrypt.hash(email + Date.now(), 10);
+        const user = new User({ name, email, password: placeholder, role });
         await user.save();
         res.status(201).json(user);
     } catch (error) {
@@ -95,8 +97,8 @@ app.get('/users/:id', async (req, res) => {
     }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'user-service' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'user-service', timestamp: new Date().toISOString() }));
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`User Service running on port ${PORT}`);
 });

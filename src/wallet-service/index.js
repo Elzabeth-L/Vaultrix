@@ -78,7 +78,7 @@ app.patch('/wallet/update', async (req, res) => {
     }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'wallet-service' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'wallet-service', timestamp: new Date().toISOString() }));
 
 app.listen(PORT, () => {
     console.log(`Wallet Service running on port ${PORT}`);

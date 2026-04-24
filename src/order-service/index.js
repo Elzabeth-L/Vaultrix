@@ -98,7 +98,7 @@ app.patch('/orders/:id/settle', async (req, res) => {
     }
 });
 
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'order-service' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'order-service', timestamp: new Date().toISOString() }));
 
 app.listen(PORT, () => {
     console.log(`Order Service running on port ${PORT}`);

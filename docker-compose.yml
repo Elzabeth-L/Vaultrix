@@ -1,10 +1,10 @@
-version: '3.8'
-
 services:
-  # Databases
+  # ── Databases ────────────────────────────────────────────────────────────────
+
   users-db:
     image: mongo:6
     container_name: vaultrix-users-db
+    restart: unless-stopped
     ports:
       - "27017:27017"
     volumes:
@@ -13,6 +13,7 @@ services:
   orders-db:
     image: mongo:6
     container_name: vaultrix-orders-db
+    restart: unless-stopped
     ports:
       - "27018:27017"
     volumes:
@@ -21,6 +22,7 @@ services:
   wallet-db:
     image: mongo:6
     container_name: vaultrix-wallet-db
+    restart: unless-stopped
     ports:
       - "27019:27017"
     volumes:
@@ -29,6 +31,7 @@ services:
   transaction-db:
     image: mongo:6
     container_name: vaultrix-transaction-db
+    restart: unless-stopped
     ports:
       - "27020:27017"
     volumes:
@@ -37,6 +40,7 @@ services:
   ledger-db:
     image: mongo:6
     container_name: vaultrix-ledger-db
+    restart: unless-stopped
     ports:
       - "27021:27017"
     volumes:
@@ -45,15 +49,27 @@ services:
   booking-db:
     image: mongo:6
     container_name: vaultrix-booking-db
+    restart: unless-stopped
     ports:
       - "27022:27017"
     volumes:
       - booking_data:/data/db
 
-  # Microservices
+  marketplace-db:
+    image: mongo:6
+    container_name: vaultrix-marketplace-db
+    restart: unless-stopped
+    ports:
+      - "27023:27017"
+    volumes:
+      - marketplace_data:/data/db
+
+  # ── Microservices ─────────────────────────────────────────────────────────────
+
   user-service:
     build: ./src/user-service
     container_name: vaultrix-user-service
+    restart: unless-stopped
     ports:
       - "3001:3001"
     environment:
@@ -66,6 +82,7 @@ services:
   order-service:
     build: ./src/order-service
     container_name: vaultrix-order-service
+    restart: unless-stopped
     ports:
       - "3002:3002"
     environment:
@@ -77,6 +94,7 @@ services:
   wallet-service:
     build: ./src/wallet-service
     container_name: vaultrix-wallet-service
+    restart: unless-stopped
     ports:
       - "3003:3003"
     environment:
@@ -88,6 +106,7 @@ services:
   transaction-service:
     build: ./src/transaction-service
     container_name: vaultrix-transaction-service
+    restart: unless-stopped
     ports:
       - "3004:3004"
     environment:
@@ -102,10 +121,12 @@ services:
       - order-service
       - user-service
       - wallet-service
+      - ledger-service
 
   ledger-service:
     build: ./src/ledger-service
     container_name: vaultrix-ledger-service
+    restart: unless-stopped
     ports:
       - "3005:3005"
     environment:
@@ -117,6 +138,7 @@ services:
   booking-service:
     build: ./src/booking-service
     container_name: vaultrix-booking-service
+    restart: unless-stopped
     ports:
       - "3006:3006"
     environment:
@@ -125,9 +147,22 @@ services:
     depends_on:
       - booking-db
 
+  marketplace-service:
+    build: ./src/marketplace-service
+    container_name: vaultrix-marketplace-service
+    restart: unless-stopped
+    ports:
+      - "3007:3007"
+    environment:
+      - PORT=3007
+      - MONGO_URI=mongodb://marketplace-db:27017/marketplace_db
+    depends_on:
+      - marketplace-db
+
   api-gateway:
     build: ./src/api-gateway
     container_name: vaultrix-api-gateway
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
@@ -137,20 +172,27 @@ services:
       - WALLET_SERVICE_URL=http://wallet-service:3003
       - TRANSACTION_SERVICE_URL=http://transaction-service:3004
       - LEDGER_SERVICE_URL=http://ledger-service:3005
+      - BOOKING_SERVICE_URL=http://booking-service:3006
+      - MARKETPLACE_SERVICE_URL=http://marketplace-service:3007
     depends_on:
       - user-service
       - order-service
       - wallet-service
       - transaction-service
       - ledger-service
+      - booking-service
+      - marketplace-service
 
   frontend:
     build: ./frontend
     container_name: vaultrix-frontend
+    restart: unless-stopped
     ports:
       - "80:80"
     depends_on:
       - api-gateway
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
 
 volumes:
   users_data:
@@ -159,3 +201,4 @@ volumes:
   transaction_data:
   ledger_data:
   booking_data:
+  marketplace_data:

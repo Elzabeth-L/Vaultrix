@@ -17,6 +17,8 @@ const services = {
     '/wallet':       process.env.WALLET_SERVICE_URL      || 'http://wallet-service:3003',
     '/transactions': process.env.TRANSACTION_SERVICE_URL || 'http://transaction-service:3004',
     '/ledger':       process.env.LEDGER_SERVICE_URL      || 'http://ledger-service:3005',
+    '/bookings':     process.env.BOOKING_SERVICE_URL     || 'http://booking-service:3006',
+    '/marketplace':  process.env.MARKETPLACE_SERVICE_URL || 'http://marketplace-service:3007',
 };
 
 for (const [prefix, target] of Object.entries(services)) {
@@ -45,7 +47,7 @@ for (const [prefix, target] of Object.entries(services)) {
 }
 
 // Health check
-app.get('/health', (req, res) => res.json({ status: 'ok', service: 'api-gateway' }));
+app.get('/health', (req, res) => res.json({ status: 'ok', service: 'api-gateway', timestamp: new Date().toISOString() }));
 
 // Bind to 0.0.0.0 so Docker exposes the port correctly
 app.listen(PORT, '0.0.0.0', () => {

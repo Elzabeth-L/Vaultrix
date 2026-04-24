@@ -173,6 +173,21 @@ input, select, button {
   color: var(--success);
 }
 
+.badge-danger {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: var(--danger);
+}
+
+.badge-warn {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
