@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Activity, Wallet, ShoppingBag, LogOut, RefreshCw, CreditCard, Download, Star, Plus, User as UserIcon, Trash2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import api from '../api';
+import api, { buildApiUrl } from '../api';
 import ReviewModal from '../components/ReviewModal';
 import { clearAuth, getCurrentUser, setCurrentUser } from '../utils/auth';
 
@@ -105,14 +105,7 @@ function OrdersPanel() {
   };
 
   const downloadInvoice = async (orderId) => {
-    try {
-      const r = await api.get(`/invoices/order/${orderId}`);
-      const invoiceId = r.data?.invoice?._id;
-      if (!invoiceId) return alert('Invoice not found.');
-      window.open(`/api/invoices/${invoiceId}/download`, '_blank');
-    } catch (error) {
-      alert(error.response?.data?.message || 'Could not fetch invoice.');
-    }
+    window.open(buildApiUrl(`/invoices/order/${orderId}/download`), '_blank', 'noopener,noreferrer');
   };
 
   const chartData = [
