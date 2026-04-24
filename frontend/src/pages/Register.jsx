@@ -4,7 +4,7 @@ import { Activity } from 'lucide-react';
 import api from '../api';
 
 export default function Register() {
-  const [form,  setForm]  = useState({ name: '', email: '', password: '', role: 'customer' });
+  const [form,  setForm]  = useState({ name: '', email: '', password: '', role: 'USER' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,8 +57,8 @@ export default function Register() {
           <div className="form-group">
             <label htmlFor="role">I want to</label>
             <select id="role" name="role" className="form-control" value={form.role} onChange={handle}>
-              <option value="customer">Request services (Customer)</option>
-              <option value="provider">Provide services (Provider)</option>
+              <option value="USER">Request services (User)</option>
+              <option value="PROVIDER">Provide services (Provider)</option>
             </select>
           </div>
           <button type="submit" className="btn btn-primary btn-full" disabled={loading}>

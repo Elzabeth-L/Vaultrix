@@ -14,7 +14,7 @@ export default function ProtectedRoute({ children, allowedRoles }) {
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Send to the correct dashboard for their actual role
-    return <Navigate to={`/dashboard/${user.role}`} replace />;
+    return <Navigate to={`/dashboard/${user.role ? user.role.toLowerCase() : 'user'}`} replace />;
   }
 
   return children;

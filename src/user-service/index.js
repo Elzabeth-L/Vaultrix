@@ -26,15 +26,16 @@ const verifyToken = (req, res, next) => {
     catch { return err(res, 'Unauthorized', 401); }
 };
 
-const requireRole = (...roles) => (req, res, next) =>
-    roles.includes(req.user?.role) ? next() : err(res, 'Forbidden: insufficient role', 403);
-
-// ── Register (public, customer/provider only) ──────────────────────────────────
+// ── Register (public, USER/PROVIDER only) ──────────────────────────────────
 app.post('/users/register', async (req, res) => {
     try {
         const { name, email, password } = req.body;
         let { role } = req.body;
-        if (!['customer', 'provider'].includes(role)) role = 'customer';
+        
+        // Convert to uppercase and validate
+        if (role) role = role.toUpperCase();
+        if (!['USER', 'PROVIDER'].includes(role)) role = 'USER';
+        
         if (!name || !email || !password)
             return err(res, 'name, email and password are required');
         if (await User.findOne({ email: email.toLowerCase() }))
@@ -50,7 +51,13 @@ app.post('/users/register', async (req, res) => {
         }).catch(e => console.error('[user-service] wallet auto-create failed:', e.message));
 
         ok(res, { message: 'Registered successfully', userId: user._id }, 201);
-    } catch (e) { err(res, e.message); }
+    } catch (e) { 
+        if (e.name === 'ValidationError') {
+            const messages = Object.values(e.errors).map(val => val.message);
+            return err(res, messages.join(', '));
+        }
+        err(res, e.message); 
+    }
 });
 
 // ── Login ──────────────────────────────────────────────────────────────────────
@@ -72,30 +79,6 @@ app.get('/users/profile', verifyToken, async (req, res) => {
         if (!user) return err(res, 'User not found', 404);
         ok(res, { user });
     } catch (e) { err(res, e.message, 500); }
-});
-
-// ── Admin: list + delete users ─────────────────────────────────────────────────
-app.get('/users', verifyToken, requireRole('admin'), async (req, res) => {
-    try {
-        const users = await User.find().select('-password').sort({ createdAt: -1 });
-        ok(res, { users });
-    } catch (e) { err(res, e.message, 500); }
-});
-
-app.get('/users/:id', verifyToken, requireRole('admin'), async (req, res) => {
-    try {
-        const user = await User.findById(req.params.id).select('-password');
-        if (!user) return err(res, 'User not found', 404);
-        ok(res, { user });
-    } catch (e) { err(res, e.message, 400); }
-});
-
-app.delete('/users/:id', verifyToken, requireRole('admin'), async (req, res) => {
-    try {
-        const user = await User.findByIdAndDelete(req.params.id);
-        if (!user) return err(res, 'User not found', 404);
-        ok(res, { message: 'User deleted' });
-    } catch (e) { err(res, e.message, 400); }
 });
 
 app.get('/health', (req, res) =>

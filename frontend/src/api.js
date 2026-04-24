@@ -1,8 +1,6 @@
 import axios from 'axios';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://43.205.135.95:3000';
-
-const api = axios.create({ baseURL: BASE_URL });
+const api = axios.create({ baseURL: '/api' });
 
 // Attach JWT on every request automatically
 api.interceptors.request.use((config) => {

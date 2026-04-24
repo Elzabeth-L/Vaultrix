@@ -27,10 +27,10 @@ function Sidebar({ active, setActive }) {
       </nav>
       <div className="sidebar-footer">
         <div className="user-profile-badge" style={{ marginBottom: '0.75rem' }}>
-          <div className="user-avatar">{user.name?.[0]?.toUpperCase() || 'C'}</div>
+          <div className="user-avatar">{user.name?.[0]?.toUpperCase() || 'U'}</div>
           <div>
             <div style={{ fontWeight: 600, fontSize: '.875rem' }}>{user.name}</div>
-            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>Customer</div>
+            <div style={{ fontSize: '.75rem', color: 'var(--text-muted)' }}>User</div>
           </div>
         </div>
         <button className="btn btn-secondary btn-full btn-sm" onClick={logout}>
@@ -192,7 +192,7 @@ function NewRequestPanel({ onCreated }) {
   );
 }
 
-export default function CustomerDashboard() {
+export default function UserDashboard() {
   const [active, setActive] = useState('wallet');
   return (
     <div className="dashboard-layout">
@@ -202,7 +202,7 @@ export default function CustomerDashboard() {
           <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '.9rem' }}>
             {active === 'wallet' ? 'Wallet' : active === 'requests' ? 'My Requests' : 'New Request'}
           </span>
-          <span className="badge badge-primary">Customer</span>
+          <span className="badge badge-primary">User</span>
         </div>
         <div className="page-content">
           {active === 'wallet'   && <WalletPanel />}
