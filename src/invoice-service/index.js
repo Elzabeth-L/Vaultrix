@@ -10,7 +10,16 @@ app.use(cors());
 app.use(express.json());
 
 const PORT = process.env.PORT || 3005;
-const ORDER_SERVICE_URL = process.env.ORDER_SERVICE_URL || 'http://127.0.0.1:3002';
+const ORDER_SERVICE_URLS = Array.from(new Set(
+    [
+        process.env.ORDER_SERVICE_URL,
+        'http://order-service:3002',
+        'http://localhost:3002',
+        'http://127.0.0.1:3002',
+    ]
+        .filter(Boolean)
+        .map((url) => url.replace(/\/+$/, ''))
+));
 connectDB();
 
 const ok = (res, data, status = 200) => res.status(status).json({ success: true, ...data });
@@ -27,36 +36,52 @@ const createInvoiceFromOrder = async (order) => {
         userId: order.userId,
         serviceId: order.serviceId,
         serviceName: order.serviceName,
-        amount: order.amount,
+        amount: Number(order.amount),
         address: order.address,
         scheduledDate: order.scheduledDate,
+        paidAt: order.paidAt || order.updatedAt || new Date(),
     });
 };
 
-const loadInvoiceForOrder = async (orderId) => {
-    let invoice = await Invoice.findOne({ orderId });
-    if (invoice) return invoice;
-
+const fetchOrderById = async (orderId) => {
     if (typeof fetch !== 'function') {
         const error = new Error('Invoice was not found and this runtime cannot fetch the order details.');
         error.status = 404;
         throw error;
     }
 
-    const orderRes = await fetch(`${ORDER_SERVICE_URL}/orders/${orderId}`);
-    if (!orderRes.ok) {
-        const error = new Error('Invoice not found');
-        error.status = 404;
-        throw error;
+    let lastError = null;
+
+    for (const baseUrl of ORDER_SERVICE_URLS) {
+        try {
+            const response = await fetch(`${baseUrl}/orders/${orderId}`);
+            const payload = await response.json().catch(() => ({}));
+
+            if (response.ok && payload.order) return payload.order;
+
+            const message = payload.message || payload.error || `Order service returned ${response.status}`;
+            const error = new Error(message);
+            error.status = response.status === 404 ? 404 : 502;
+            lastError = error;
+
+            if (response.status === 404) continue;
+        } catch (error) {
+            lastError = error;
+        }
     }
 
-    const payload = await orderRes.json().catch(() => ({}));
-    const order = payload.order;
-    if (!order) {
-        const error = new Error('Invoice not found');
-        error.status = 404;
-        throw error;
-    }
+    if (lastError) throw lastError;
+
+    const error = new Error('Invoice not found');
+    error.status = 404;
+    throw error;
+};
+
+const loadInvoiceForOrder = async (orderId) => {
+    let invoice = await Invoice.findOne({ orderId });
+    if (invoice) return invoice;
+
+    const order = await fetchOrderById(orderId);
 
     const isPaid = String(order.paymentStatus || '').toUpperCase() === 'PAID';
     if (!isPaid) {
@@ -137,7 +162,7 @@ app.post('/invoices', async (req, res) => {
 app.get('/invoices/order/:orderId', async (req, res) => {
     try {
         const invoice = await loadInvoiceForOrder(req.params.orderId);
-        ok(res, { invoice }, 201);
+        ok(res, { invoice });
     } catch (e) {
         err(res, e.message, e.status || 500);
     }

@@ -61,6 +61,7 @@ function OrdersPanel() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(null);
+  const [downloadingInvoice, setDownloadingInvoice] = useState(null);
   const [reviewOrder, setReviewOrder] = useState(null);
   const [reviewed, setReviewed] = useState({});
   const [msg, setMsg] = useState('');
@@ -94,8 +95,8 @@ function OrdersPanel() {
     setPaying(order._id);
     setMsg('');
     try {
-      await api.post('/wallet/pay', { userId: user.id, orderId: order._id });
-      setMsg('Payment successful. Invoice generated.');
+      const response = await api.post('/wallet/pay', { userId: user.id, orderId: order._id });
+      setMsg(response.data?.invoiceError || response.data?.message || 'Payment successful. Invoice generated.');
       load();
     } catch (err) {
       setMsg(err.response?.data?.error || err.response?.data?.message || 'Payment failed.');
@@ -105,7 +106,16 @@ function OrdersPanel() {
   };
 
   const downloadInvoice = async (orderId) => {
-    window.open(buildApiUrl(`/invoices/order/${orderId}/download`), '_blank', 'noopener,noreferrer');
+    setDownloadingInvoice(orderId);
+    setMsg('');
+    try {
+      await api.get(`/invoices/order/${orderId}`);
+      window.open(buildApiUrl(`/invoices/order/${orderId}/download`), '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setMsg(err.response?.data?.message || 'Could not fetch invoice.');
+    } finally {
+      setDownloadingInvoice(null);
+    }
   };
 
   const chartData = [
@@ -171,8 +181,12 @@ function OrdersPanel() {
                   </button>
                 )}
                 {order.paymentStatus === 'PAID' && (
-                  <button className="btn btn-secondary btn-sm" onClick={() => downloadInvoice(order._id)}>
-                    <Download size={13} /> Invoice
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={() => downloadInvoice(order._id)}
+                    disabled={downloadingInvoice === order._id}
+                  >
+                    {downloadingInvoice === order._id ? <span className="spinner" /> : <><Download size={13} /> Invoice</>}
                   </button>
                 )}
                 {order.status === 'COMPLETED' && order.paymentStatus === 'PAID' && !reviewed[order._id] && (

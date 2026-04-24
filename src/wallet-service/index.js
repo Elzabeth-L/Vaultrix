@@ -104,8 +104,18 @@ app.post('/wallet/pay', async (req, res) => {
         wallet.balance -= order.amount;
         await wallet.save();
 
-        await fetch(`${ORDER_URL}/orders/${orderId}/pay`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
+        const payRes = await fetch(`${ORDER_URL}/orders/${orderId}/pay`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' } });
+        const payPayload = await payRes.json().catch(() => ({}));
+        if (!payRes.ok) {
+            wallet.balance += order.amount;
+            await wallet.save();
+            return res.status(payRes.status).json({
+                error: payPayload.message || payPayload.error || 'Could not mark the order as paid',
+            });
+        }
 
+        let invoice = null;
+        let invoiceError = null;
         const invoiceRes = await fetch(`${INVOICE_URL}/invoices`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -119,9 +129,20 @@ app.post('/wallet/pay', async (req, res) => {
                 scheduledDate: order.scheduledDate,
             }),
         });
-        const invoice = invoiceRes.ok ? await invoiceRes.json() : null;
+        const invoicePayload = await invoiceRes.json().catch(() => ({}));
+        if (invoiceRes.ok) {
+            invoice = invoicePayload.invoice || invoicePayload;
+        } else {
+            invoiceError = invoicePayload.message || invoicePayload.error || 'Invoice generation failed';
+            console.error('[wallet-service] invoice creation failed:', invoiceError);
+        }
 
-        res.status(200).json({ message: 'Payment successful', wallet, invoice });
+        res.status(200).json({
+            message: invoiceError ? 'Payment successful, but invoice generation is pending.' : 'Payment successful',
+            wallet,
+            invoice,
+            invoiceError,
+        });
     } catch (error) {
         console.error('[wallet-service] /wallet/pay error:', error.message);
         res.status(500).json({ error: error.message });
