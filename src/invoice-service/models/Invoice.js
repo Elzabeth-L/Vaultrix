@@ -13,14 +13,13 @@ const invoiceSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Auto-generate invoice number before save
-invoiceSchema.pre('save', async function(next) {
+invoiceSchema.pre('save', async function() {
     if (!this.invoiceNo) {
         const date = new Date();
         const dateStr = `${date.getFullYear()}${String(date.getMonth()+1).padStart(2,'0')}${String(date.getDate()).padStart(2,'0')}`;
         const count = await mongoose.model('Invoice').countDocuments();
         this.invoiceNo = `INV-${dateStr}-${String(count + 1).padStart(4, '0')}`;
     }
-    next();
 });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);
