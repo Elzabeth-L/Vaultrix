@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Activity, Search, Star, ArrowRight, LogOut } from 'lucide-react';
-import { getServices, SERVICES_REGISTRY_EVENT } from '../utils/services';
+import api from '../api';
+import { getServices, loadServices, SERVICES_REGISTRY_EVENT, DEFAULT_SERVICE_BACKGROUND } from '../utils/services';
 import RequestServiceModal from '../components/RequestServiceModal';
 import { clearAuth, getCurrentUser } from '../utils/auth';
 
@@ -17,6 +18,7 @@ export default function ServiceCatalog() {
     const syncServices = () => setServices(getServices());
     window.addEventListener(SERVICES_REGISTRY_EVENT, syncServices);
     window.addEventListener('storage', syncServices);
+    loadServices(api).then(setServices).catch(() => {});
     return () => {
       window.removeEventListener(SERVICES_REGISTRY_EVENT, syncServices);
       window.removeEventListener('storage', syncServices);
@@ -35,7 +37,16 @@ export default function ServiceCatalog() {
   };
 
   return (
-    <div style={{ minHeight: '100vh', background: '#0a0a0f', color: '#f8fafc' }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        color: '#f8fafc',
+        backgroundImage: `linear-gradient(rgba(10, 10, 15, 0.84), rgba(10, 10, 15, 0.92)), url('${DEFAULT_SERVICE_BACKGROUND}')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed',
+      }}
+    >
       <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 2rem', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(13,13,26,0.95)', backdropFilter: 'blur(12px)', position: 'sticky', top: 0, zIndex: 100 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.2rem', color: '#8b5cf6' }}>
           <Activity size={22} /> Vaultrix
@@ -101,7 +112,7 @@ export default function ServiceCatalog() {
               transition: 'transform 0.2s',
               minHeight: 360,
               justifyContent: 'space-between',
-              backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${service.backgroundImage}')`,
+              backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${service.backgroundImage || DEFAULT_SERVICE_BACKGROUND}')`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
               backgroundRepeat: 'no-repeat',

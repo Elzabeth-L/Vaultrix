@@ -1,11 +1,30 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Activity, CheckCircle, XCircle, Clock, LogOut, RefreshCw, Flag, BarChart2 } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import {
+  Activity,
+  CheckCircle,
+  XCircle,
+  Clock,
+  LogOut,
+  RefreshCw,
+  Flag,
+  BarChart2,
+  Briefcase,
+  PlusCircle,
+  Image as ImageIcon,
+} from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../api';
 import { clearAuth } from '../utils/auth';
+import {
+  getServices,
+  loadServices,
+  createService,
+  SERVICES_REGISTRY_EVENT,
+  DEFAULT_SERVICE_BACKGROUND,
+} from '../utils/services';
 
-const TABS = ['PENDING', 'APPROVED', 'COMPLETED', 'REJECTED'];
+const ORDER_TABS = ['PENDING', 'APPROVED', 'COMPLETED', 'REJECTED'];
 
 function Sidebar({ active, setActive }) {
   const navigate = useNavigate();
@@ -19,9 +38,15 @@ function Sidebar({ active, setActive }) {
         <button className={`sidebar-link ${active === 'orders' ? 'active' : ''}`} onClick={() => setActive('orders')}>
           <CheckCircle size={16} /> Order Management
         </button>
+        <button className={`sidebar-link ${active === 'services' ? 'active' : ''}`} onClick={() => setActive('services')}>
+          <Briefcase size={16} /> Services
+        </button>
         <button className={`sidebar-link ${active === 'stats' ? 'active' : ''}`} onClick={() => setActive('stats')}>
           <BarChart2 size={16} /> Statistics
         </button>
+        <Link to="/services" className="sidebar-link" style={{ textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <ImageIcon size={16} /> Browse Catalog
+        </Link>
       </nav>
       <div className="sidebar-footer">
         <div className="user-profile-badge" style={{ marginBottom: '0.75rem' }}>
@@ -105,7 +130,7 @@ function OrderManagement() {
       {msg && <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '1.5rem' }}>{msg.text}</div>}
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {TABS.map((t) => (
+        {ORDER_TABS.map((t) => (
           <button key={t} onClick={() => setTab(t)} className={`btn ${tab === t ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
             {t}
           </button>
@@ -181,6 +206,225 @@ function OrderManagement() {
   );
 }
 
+function ServicesManagement() {
+  const [services, setServices] = useState(() => getServices());
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [form, setForm] = useState({
+    name: '',
+    id: '',
+    icon: '',
+    description: '',
+    priceFrom: '',
+    category: '',
+    backgroundImage: '',
+    reviewCriteria: '',
+  });
+
+  const syncServicesFromCache = useCallback(() => setServices(getServices()), []);
+
+  const loadServicesFromApi = useCallback(async () => {
+    try {
+      const nextServices = await loadServices(api);
+      setServices(nextServices);
+    } catch (error) {
+      console.error('Failed to load services:', error.message);
+      setServices(getServices());
+    }
+  }, []);
+
+  useEffect(() => {
+    const syncServices = () => syncServicesFromCache();
+    window.addEventListener(SERVICES_REGISTRY_EVENT, syncServices);
+    window.addEventListener('storage', syncServices);
+    loadServicesFromApi();
+    return () => {
+      window.removeEventListener(SERVICES_REGISTRY_EVENT, syncServices);
+      window.removeEventListener('storage', syncServices);
+    };
+  }, [syncServicesFromCache, loadServicesFromApi]);
+
+  const handle = (e) => setForm((current) => ({ ...current, [e.target.name]: e.target.value }));
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setMsg(null);
+
+    if (!form.name.trim() || !form.description.trim() || !form.priceFrom || Number(form.priceFrom) <= 0) {
+      setMsg({ type: 'error', text: 'Name, description, and a valid price are required.' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const service = await createService(api, {
+        id: form.id,
+        name: form.name,
+        icon: form.icon,
+        description: form.description,
+        priceFrom: form.priceFrom,
+        category: form.category,
+        backgroundImage: form.backgroundImage,
+        reviewCriteria: form.reviewCriteria,
+      });
+
+      setMsg({ type: 'success', text: `${service.name} was added to the catalog.` });
+      setForm({
+        name: '',
+        id: '',
+        icon: '',
+        description: '',
+        priceFrom: '',
+        category: '',
+        backgroundImage: '',
+        reviewCriteria: '',
+      });
+      loadServicesFromApi();
+    } catch (error) {
+      setMsg({ type: 'error', text: error.response?.data?.message || error.message || 'Could not save service.' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const previewImage = form.backgroundImage.trim() || DEFAULT_SERVICE_BACKGROUND;
+  const previewIcon = form.icon.trim() || '\u{1F6E0}\uFE0F';
+  const previewName = form.name.trim() || 'New Service';
+  const previewCategory = form.category.trim() || 'General';
+  const previewDescription = form.description.trim() || 'Describe the service so customers know exactly what they are booking.';
+  const previewPrice = Number(form.priceFrom) > 0 ? Number(form.priceFrom) : 0;
+
+  return (
+    <div className="animate-in">
+      {msg && <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '1.5rem' }}>{msg.text}</div>}
+
+      <div className="section-header">
+        <span className="section-title">Existing Services</span>
+        <button className="btn btn-secondary btn-sm" onClick={loadServicesFromApi}><RefreshCw size={13} /> Refresh</button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+        {services.map((service) => (
+          <div
+            key={service.id}
+            className="card"
+            style={{
+              minHeight: 230,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${service.backgroundImage || DEFAULT_SERVICE_BACKGROUND}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+              <div style={{ fontSize: '2rem' }}>{service.icon}</div>
+              <span className={`badge ${service.isCustom ? 'badge-success' : 'badge-primary'}`}>{service.isCustom ? 'CUSTOM' : 'BUILT-IN'}</span>
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>{service.name}</h3>
+              <div style={{ color: '#dbe4f0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{service.category}</div>
+              <p style={{ color: '#dbe4f0', fontSize: '0.88rem', lineHeight: 1.6 }}>{service.description}</p>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+              <span style={{ color: '#6ee7b7', fontWeight: 700 }}>From ${service.priceFrom}</span>
+              <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>ID: {service.id}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 0.8fr)', gap: '1.5rem' }}>
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <PlusCircle size={18} />
+            <h2 style={{ margin: 0 }}>Add Service</h2>
+          </div>
+
+          <form onSubmit={submit}>
+            <div className="form-group">
+              <label>Service name</label>
+              <input name="name" className="form-control" placeholder="Gardening" value={form.name} onChange={handle} required />
+            </div>
+            <div className="form-group">
+              <label>Service ID (optional)</label>
+              <input name="id" className="form-control" placeholder="gardening-service" value={form.id} onChange={handle} />
+              <span style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                Leave blank to auto-generate from the name.
+              </span>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label>Icon</label>
+                <input name="icon" className="form-control" placeholder="🧰" value={form.icon} onChange={handle} />
+              </div>
+              <div className="form-group">
+                <label>Category</label>
+                <input name="category" className="form-control" placeholder="Home" value={form.category} onChange={handle} />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div className="form-group">
+                <label>Price from ($)</label>
+                <input name="priceFrom" type="number" min="1" className="form-control" placeholder="699" value={form.priceFrom} onChange={handle} required />
+              </div>
+              <div className="form-group">
+                <label>Background image URL</label>
+                <input name="backgroundImage" className="form-control" placeholder="https://example.com/image.jpg" value={form.backgroundImage} onChange={handle} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Description</label>
+              <textarea name="description" className="form-control" rows={3} placeholder="Explain what this service includes." value={form.description} onChange={handle} required style={{ resize: 'vertical' }} />
+            </div>
+            <div className="form-group">
+              <label>Review criteria</label>
+              <input name="reviewCriteria" className="form-control" placeholder="Quality, Timeliness, Professionalism" value={form.reviewCriteria} onChange={handle} />
+              <span style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.75rem', color: '#94a3b8' }}>
+                Optional. Separate criteria with commas.
+              </span>
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={saving}>
+              {saving ? <span className="spinner" /> : <><PlusCircle size={15} /> Add Service</>}
+            </button>
+          </form>
+        </div>
+
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <ImageIcon size={18} />
+            <h2 style={{ margin: 0 }}>Live Preview</h2>
+          </div>
+          <div
+            style={{
+              minHeight: 320,
+              borderRadius: '1rem',
+              overflow: 'hidden',
+              padding: '1.25rem',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${previewImage}')`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              border: '1px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            <div style={{ fontSize: '2.4rem' }}>{previewIcon}</div>
+            <div>
+              <span className="badge badge-primary" style={{ marginBottom: '0.75rem' }}>{previewCategory}</span>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '0.35rem' }}>{previewName}</h3>
+              <p style={{ color: '#dbe4f0', fontSize: '0.9rem', lineHeight: 1.6 }}>{previewDescription}</p>
+            </div>
+            <div style={{ color: '#6ee7b7', fontWeight: 700 }}>From ${previewPrice}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Statistics() {
   const [allOrders, setAllOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -211,7 +455,7 @@ function Statistics() {
 
   if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}><span className="spinner" /></div>;
 
-  const counts = TABS.map((t) => ({ status: t, count: allOrders.filter((o) => o.status === t).length }));
+  const counts = ORDER_TABS.map((t) => ({ status: t, count: allOrders.filter((o) => o.status === t).length }));
   const revenue = allOrders.filter((o) => o.paymentStatus === 'PAID').reduce((s, o) => s + (o.amount || 0), 0);
   const pending = allOrders.filter((o) => o.paymentStatus === 'UNPAID' && o.status === 'APPROVED').reduce((s, o) => s + (o.amount || 0), 0);
 
@@ -248,12 +492,13 @@ export default function AdminDashboard() {
       <main className="main-content">
         <div className="top-header">
           <span style={{ fontWeight: 600, color: 'var(--text-muted)', fontSize: '.9rem' }}>
-            {active === 'orders' ? 'Order Management' : 'Statistics'}
+            {active === 'orders' ? 'Order Management' : active === 'services' ? 'Services' : 'Statistics'}
           </span>
           <span className="badge badge-warn" style={{ padding: '0.5em 1em', fontSize: '0.8em' }}>Administrator</span>
         </div>
         <div className="page-content">
           {active === 'orders' && <OrderManagement />}
+          {active === 'services' && <ServicesManagement />}
           {active === 'stats' && <Statistics />}
         </div>
       </main>

@@ -5,6 +5,7 @@ const cors       = require('cors');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
 const User       = require('./models/User');
+const Service    = require('./models/Service');
 
 const app = express();
 app.use(cors());
@@ -14,6 +15,98 @@ const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || 'vaultrix-super-secret-key';
 const WALLET_URL = process.env.WALLET_SERVICE_URL || 'http://127.0.0.1:3003';
 const INTERNAL_SERVICE_TOKEN = process.env.INTERNAL_SERVICE_TOKEN || 'vaultrix-internal-token';
+const DEFAULT_SERVICE_BACKGROUND = 'https://images.openai.com/static-rsc-4/aMF6yfUacXWNU326dNEtZOm0Epe1hDm9ot18K-e8hLSVuXUFPwPGefc6ioebEyCOUvSfG1x15R5MWEoPeAsdck3B6FSgyzu9QnzibFNBgEF-M9sgzq25OA0ed0O6uxeru5nCuyt0-kBXsZZPxTuEqT9DRVfxFmIINIvquRdnNSd2Hk0XsZ_SyRVuVxYrjbpE?purpose=fullsize';
+
+const DEFAULT_SERVICES = [
+    {
+        serviceId: 'cleaning',
+        name: 'Home Cleaning',
+        icon: '\u{1F9F9}',
+        description: 'Professional deep-clean for your home, office, or apartment.',
+        priceFrom: 499,
+        category: 'Home',
+        backgroundImage: 'https://cdn.mos.cms.futurecdn.net/CRSQiBvET2uwKdQK97E4Ad.jpg',
+        reviewCriteria: ['Cleanliness', 'Timeliness', 'Professionalism'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'plumbing',
+        name: 'Plumbing',
+        icon: '\u{1F527}',
+        description: 'Leak repairs, pipe installation, and full plumbing services.',
+        priceFrom: 299,
+        category: 'Home',
+        backgroundImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQil4s8KJptLyqlk4j-mmB5-jYLHM89sIiBfrtHL_LKOQ&s',
+        reviewCriteria: ['Workmanship', 'Timeliness', 'Value for Money'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'carpentry',
+        name: 'Carpentry',
+        icon: '\u{1FAB5}',
+        description: 'Custom furniture, repairs, and all woodwork solutions.',
+        priceFrom: 599,
+        category: 'Home',
+        backgroundImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTAvAQaQhvw1em5iqpxRaTUIkCqehIYHamKog&s',
+        reviewCriteria: ['Workmanship', 'Quality', 'Timeliness'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'painting',
+        name: 'Painting',
+        icon: '\u{1F3A8}',
+        description: 'Interior and exterior painting with premium-quality finishes.',
+        priceFrom: 799,
+        category: 'Home',
+        backgroundImage: 'https://s3-blog.homelane.com/design-ideas-pre/wp-content/uploads/2022/11/slate-grey-wall-paint.jpg',
+        reviewCriteria: ['Neatness', 'Quality', 'Timeliness'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'electronics',
+        name: 'Electronics Repair',
+        icon: '\u{1F50C}',
+        description: 'AC, TV, washing machine, and all home appliance repairs.',
+        priceFrom: 199,
+        category: 'Tech',
+        backgroundImage: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT6BmZt5eHe96kw5MQR7gKpcNHqHHd9MlsZMQ&s',
+        reviewCriteria: ['Quality', 'Speed', 'Value for Money'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'tutoring',
+        name: 'Tutoring',
+        icon: '\u{1F4DA}',
+        description: 'One-on-one tutoring for school, college, and entrance exams.',
+        priceFrom: 399,
+        category: 'Education',
+        backgroundImage: 'https://images.rawpixel.com/image_800/czNmcy1wcml2YXRlL3Jhd3BpeGVsX2ltYWdlcy93ZWJzaXRlX2NvbnRlbnQvbHIvNDQtay04My1jaGltLTg1MzUxNi5qcGc.jpg',
+        reviewCriteria: ['Clarity', 'Patience', 'Knowledge'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'design',
+        name: 'Graphic Design',
+        icon: '\u270F\uFE0F',
+        description: 'Logos, branding, UI/UX, and all creative design tasks.',
+        priceFrom: 999,
+        category: 'Creative',
+        backgroundImage: 'https://planbcreative.org/wp-content/uploads/2021/02/pexels-tranmautritam-326501-2-1024x682.jpg',
+        reviewCriteria: ['Creativity', 'Quality', 'Communication'],
+        isCustom: false,
+    },
+    {
+        serviceId: 'moving',
+        name: 'Moving & Shifting',
+        icon: '\u{1F69A}',
+        description: 'Safe packing, loading, transport, and unpacking service.',
+        priceFrom: 1499,
+        category: 'Logistics',
+        backgroundImage: 'https://5.imimg.com/data5/BA/FY/QO/SELLER-94934398/furniture-shifting-service-500x500.jpg',
+        reviewCriteria: ['Care', 'Timeliness', 'Professionalism'],
+        isCustom: false,
+    },
+];
 
 connectDB();
 
@@ -42,6 +135,45 @@ const verifyInternalToken = (req, res, next) => {
     const token = req.headers['x-internal-token'];
     if (token !== INTERNAL_SERVICE_TOKEN) return err(res, 'Forbidden', 403);
     next();
+};
+
+const verifyAdmin = (req, res, next) => {
+    if (req.user?.role !== 'ADMIN') return err(res, 'Forbidden', 403);
+    next();
+};
+
+const slugify = (value = '') =>
+    String(value)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || `service-${Date.now()}`;
+
+const sanitizeService = (service) => {
+    const source = service.toObject ? service.toObject() : service;
+    return {
+        id: source.serviceId,
+        name: source.name,
+        icon: source.icon || '\u{1F6E0}\uFE0F',
+        description: source.description,
+        priceFrom: Number(source.priceFrom) || 0,
+        category: source.category || 'General',
+        backgroundImage: source.backgroundImage || DEFAULT_SERVICE_BACKGROUND,
+        reviewCriteria: Array.isArray(source.reviewCriteria) && source.reviewCriteria.length
+            ? source.reviewCriteria
+            : ['Quality', 'Timeliness', 'Professionalism'],
+        isCustom: source.isCustom !== false,
+    };
+};
+
+const parseReviewCriteria = (criteria) => {
+    if (Array.isArray(criteria)) {
+        return criteria.map((item) => String(item || '').trim()).filter(Boolean);
+    }
+    return String(criteria || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean);
 };
 
 const cleanupWallet = async (userId) => {
@@ -126,6 +258,51 @@ app.get('/users/internal/:id', verifyInternalToken, async (req, res) => {
         const user = await User.findById(req.params.id).select('-password');
         if (!user) return err(res, 'User not found', 404);
         ok(res, { user: sanitizeUser(user) });
+    } catch (e) {
+        err(res, e.message, 500);
+    }
+});
+
+app.get('/users/services', async (req, res) => {
+    try {
+        const customServices = await Service.find({ isActive: true }).sort({ createdAt: -1 });
+        ok(res, {
+            services: [
+                ...DEFAULT_SERVICES.map((service) => sanitizeService(service)),
+                ...customServices.map((service) => sanitizeService(service)),
+            ],
+        });
+    } catch (e) {
+        err(res, e.message, 500);
+    }
+});
+
+app.post('/users/services', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const serviceId = slugify(req.body.id || req.body.name);
+        const name = String(req.body.name || '').trim();
+        const description = String(req.body.description || '').trim();
+        const priceFrom = Number(req.body.priceFrom);
+
+        if (!name || !description || !priceFrom)
+            return err(res, 'name, description and priceFrom are required');
+
+        if (DEFAULT_SERVICES.some((service) => service.serviceId === serviceId) || await Service.findOne({ serviceId }))
+            return err(res, 'A service with this ID already exists');
+
+        const service = await Service.create({
+            serviceId,
+            name,
+            icon: String(req.body.icon || '\u{1F6E0}\uFE0F').trim(),
+            description,
+            priceFrom,
+            category: String(req.body.category || 'General').trim(),
+            backgroundImage: String(req.body.backgroundImage || '').trim() || DEFAULT_SERVICE_BACKGROUND,
+            reviewCriteria: parseReviewCriteria(req.body.reviewCriteria),
+            createdBy: req.user.id,
+        });
+
+        ok(res, { service: sanitizeService(service) }, 201);
     } catch (e) {
         err(res, e.message, 500);
     }

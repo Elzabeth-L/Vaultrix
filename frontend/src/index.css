@@ -30,6 +30,7 @@
   --shadow-sm:   0 1px 2px rgba(0,0,0,0.5);
   --shadow:      0 4px 12px rgba(0,0,0,0.5);
   --shadow-lg:   0 10px 25px rgba(0,0,0,0.6);
+  --shell-bg-image:url('https://images.openai.com/static-rsc-4/aMF6yfUacXWNU326dNEtZOm0Epe1hDm9ot18K-e8hLSVuXUFPwPGefc6ioebEyCOUvSfG1x15R5MWEoPeAsdck3B6FSgyzu9QnzibFNBgEF-M9sgzq25OA0ed0O6uxeru5nCuyt0-kBXsZZPxTuEqT9DRVfxFmIINIvquRdnNSd2Hk0XsZ_SyRVuVxYrjbpE?purpose=fullsize');
   
   --r:    8px;
   --r-sm: 6px;
@@ -293,7 +294,10 @@ tr:hover td{ background:rgba(255,255,255,0.02); }
 .dashboard-layout{
   display:flex;
   min-height:100vh;
-  background:var(--bg);
+  background-image: linear-gradient(rgba(10, 10, 15, 0.86), rgba(10, 10, 15, 0.92)), var(--shell-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 .sidebar{

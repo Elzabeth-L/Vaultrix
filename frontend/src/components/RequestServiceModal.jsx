@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Calendar, MapPin, FileText, DollarSign } from 'lucide-react';
 import api from '../api';
 import { getCurrentUser } from '../utils/auth';
+import { DEFAULT_SERVICE_BACKGROUND } from '../utils/services';
 
 const getLocalDateTimeMin = () => {
   const now = new Date();
@@ -57,7 +58,7 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
             marginBottom: '1.5rem',
             padding: '1.25rem',
             borderRadius: '1rem',
-            backgroundImage: `linear-gradient(135deg, rgba(8,10,15,0.2) 0%, rgba(8,10,15,0.82) 55%, rgba(8,10,15,0.95) 100%), url('${service.backgroundImage}')`,
+            backgroundImage: `linear-gradient(135deg, rgba(8,10,15,0.2) 0%, rgba(8,10,15,0.82) 55%, rgba(8,10,15,0.95) 100%), url('${service.backgroundImage || DEFAULT_SERVICE_BACKGROUND}')`,
             backgroundSize: 'cover',
             backgroundPosition: 'center',
             border: '1px solid rgba(255,255,255,0.08)',

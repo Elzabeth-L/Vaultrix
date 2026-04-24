@@ -143,58 +143,106 @@ const streamInvoicePdf = (res, invoice) => {
     res.setHeader('Content-Disposition', `attachment; filename="invoice-${invoice.invoiceNo}.pdf"`);
     doc.pipe(res);
 
-    doc.rect(0, 0, 595, 120).fill('#0f0f1a');
-    doc.fillColor('#8b5cf6').fontSize(28).font('Helvetica-Bold').text('VAULTRIX', 50, 35);
-    doc.fillColor('#94a3b8').fontSize(10).font('Helvetica').text('Professional Service Platform', 50, 68);
-    doc.fillColor('#ffffff').fontSize(22).font('Helvetica-Bold').text('INVOICE', 400, 45, { align: 'right' });
-    doc.fillColor('#06b6d4').fontSize(11).font('Helvetica').text(invoice.invoiceNo, 400, 75, { align: 'right' });
-
-    doc.fillColor('#1e1e2e').rect(50, 140, 495, 80).fill('#1e1e2e');
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('INVOICE DATE', 65, 152);
-    doc.fillColor('#f1f5f9').fontSize(11).font('Helvetica-Bold').text(new Date(invoice.paidAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' }), 65, 165);
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('STATUS', 220, 152);
-    doc.fillColor('#10b981').fontSize(11).font('Helvetica-Bold').text('PAID', 220, 165);
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('ORDER ID', 320, 152);
-    doc.fillColor('#f1f5f9').fontSize(9).font('Helvetica').text(invoice.orderId, 320, 165, { width: 200 });
-
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('BILLED TO', 50, 235);
-    doc.fillColor('#f1f5f9').fontSize(11).font('Helvetica-Bold').text(invoice.userName || 'Customer', 50, 249);
-    doc.fillColor('#cbd5e1').fontSize(9).font('Helvetica').text(invoice.userEmail || '-', 50, 265);
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('CUSTOMER ID', 320, 235);
-    doc.fillColor('#f1f5f9').fontSize(10).font('Helvetica').text(invoice.userId || '-', 320, 249, { width: 210 });
-
-    doc.moveTo(50, 295).lineTo(545, 295).strokeColor('#2d2d3d').lineWidth(1).stroke();
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('SERVICE DETAILS', 50, 310);
-    doc.moveTo(50, 323).lineTo(545, 323).strokeColor('#2d2d3d').lineWidth(0.5).stroke();
-
-    doc.fillColor('#8b5cf6').fontSize(9).font('Helvetica-Bold');
-    doc.text('SERVICE', 50, 335);
-    doc.text('ADDRESS', 210, 335);
-    doc.text('SCHEDULED DATE', 370, 335);
-    doc.text('AMOUNT', 490, 335, { align: 'right' });
-    doc.moveTo(50, 349).lineTo(545, 349).strokeColor('#2d2d3d').lineWidth(0.5).stroke();
-
-    doc.fillColor('#f1f5f9').fontSize(10).font('Helvetica');
-    doc.text(invoice.serviceName || invoice.serviceId, 50, 361, { width: 150 });
-    doc.text(invoice.address || '-', 210, 361, { width: 145 });
-    const schedDate = invoice.scheduledDate ? new Date(invoice.scheduledDate).toLocaleDateString('en-IN') : '-';
-    doc.text(schedDate, 370, 361, { width: 110 });
-    doc.fillColor('#10b981').fontSize(12).font('Helvetica-Bold');
-    doc.text(`$${Number(invoice.amount).toFixed(2)}`, 490, 359, { align: 'right' });
-
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('SERVICE DESCRIPTION', 50, 405);
-    doc.fillColor('#f1f5f9').fontSize(10).font('Helvetica').text(invoice.description || 'Professional service booking', 50, 419, {
-        width: 495,
-        height: 55,
+    const amount = Number(invoice.amount || 0).toFixed(2);
+    const invoiceDate = new Date(invoice.paidAt || invoice.createdAt || Date.now()).toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
     });
+    const scheduledDate = invoice.scheduledDate
+        ? new Date(invoice.scheduledDate).toLocaleDateString('en-IN', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+        })
+        : '-';
+    const billedToLines = [
+        invoice.userName || 'Customer',
+        invoice.address || '-',
+        invoice.userEmail || '-',
+    ];
+    const fromLines = [
+        'Vaultrix',
+        'Service Platform',
+        'admin@vaultrix.io',
+    ];
 
-    doc.rect(350, 500, 195, 55).fill('#1e1e2e');
-    doc.fillColor('#94a3b8').fontSize(9).font('Helvetica').text('TOTAL AMOUNT PAID', 365, 512);
-    doc.fillColor('#10b981').fontSize(20).font('Helvetica-Bold').text(`$${Number(invoice.amount).toFixed(2)}`, 365, 527);
+    doc.rect(0, 0, 595, 842).fill('#fcfcfc');
 
-    doc.moveTo(50, 680).lineTo(545, 680).strokeColor('#2d2d3d').lineWidth(1).stroke();
-    doc.fillColor('#94a3b8').fontSize(8).font('Helvetica').text('Thank you for using Vaultrix. This is a system-generated invoice.', 50, 692, { align: 'center', width: 495 });
-    doc.fillColor('#8b5cf6').fontSize(8).text('vaultrix.io  |  admin@vaultrix.io', 50, 706, { align: 'center', width: 495 });
+    doc.fillColor('#202020').font('Helvetica').fontSize(16).text('VAULTRIX', 50, 42);
+    doc.fillColor('#2b2b2b').font('Helvetica').fontSize(11).text(`NO. ${invoice.invoiceNo}`, 420, 44, { align: 'right', width: 125 });
+
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(50).text('INVOICE', 50, 100);
+
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14).text('Date:', 50, 196);
+    doc.fillColor('#333333').font('Helvetica').fontSize(14).text(invoiceDate, 95, 196);
+
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14).text('Billed to:', 50, 255);
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(14).text('From:', 320, 255);
+
+    doc.fillColor('#333333').font('Helvetica').fontSize(11);
+    doc.text(billedToLines.join('\n'), 50, 279, { width: 205, lineGap: 3 });
+    doc.text(fromLines.join('\n'), 320, 279, { width: 190, lineGap: 3 });
+
+    const tableTop = 380;
+    const tableLeft = 50;
+    const tableWidth = 495;
+    const colQty = 320;
+    const colPrice = 405;
+    const colAmount = 490;
+
+    doc.rect(tableLeft, tableTop, tableWidth, 34).fill('#e8e8ea');
+    doc.fillColor('#2a2a2a').font('Helvetica').fontSize(12);
+    doc.text('Item', 65, tableTop + 11);
+    doc.text('Quantity', colQty, tableTop + 11, { width: 70, align: 'center' });
+    doc.text('Price', colPrice, tableTop + 11, { width: 60, align: 'center' });
+    doc.text('Amount', colAmount, tableTop + 11, { width: 40, align: 'right' });
+
+    const rowTop = tableTop + 54;
+    doc.fillColor('#2f2f2f').font('Helvetica').fontSize(12);
+    doc.text(invoice.serviceName || invoice.serviceId, 65, rowTop, { width: 230 });
+    doc.text('1', colQty, rowTop, { width: 70, align: 'center' });
+    doc.text(`$${amount}`, colPrice, rowTop, { width: 60, align: 'center' });
+    doc.text(`$${amount}`, colAmount, rowTop, { width: 40, align: 'right' });
+
+    const detailsTop = rowTop + 28;
+    doc.fillColor('#7a7a7a').font('Helvetica').fontSize(10);
+    doc.text(`Scheduled: ${scheduledDate}`, 65, detailsTop);
+    doc.text(`Order ID: ${invoice.orderId}`, 65, detailsTop + 15, { width: 310 });
+    if (invoice.description) {
+        doc.text(`Note: ${invoice.description}`, 65, detailsTop + 30, { width: 340, lineGap: 2 });
+    }
+
+    const totalLineTop = 545;
+    doc.moveTo(55, totalLineTop).lineTo(540, totalLineTop).strokeColor('#d5d5d5').lineWidth(1).stroke();
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(12).text('Total', 420, totalLineTop + 14, { width: 60, align: 'right' });
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(12).text(`$${amount}`, 490, totalLineTop + 14, { width: 40, align: 'right' });
+    doc.moveTo(55, totalLineTop + 40).lineTo(540, totalLineTop + 40).strokeColor('#e0e0e0').lineWidth(1).stroke();
+
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(12).text('Payment method:', 50, 615);
+    doc.fillColor('#333333').font('Helvetica').fontSize(12).text('Vaultrix Wallet', 160, 615);
+
+    doc.fillColor('#111111').font('Helvetica-Bold').fontSize(12).text('Note:', 50, 642);
+    doc.fillColor('#333333').font('Helvetica').fontSize(12).text('Thank you for choosing Vaultrix.', 88, 642);
+
+    doc.save();
+    doc.fillColor('#d7d9dc');
+    doc.moveTo(-30, 785)
+        .bezierCurveTo(85, 735, 180, 735, 290, 805)
+        .lineTo(0, 842)
+        .lineTo(0, 785)
+        .fill();
+    doc.restore();
+
+    doc.save();
+    doc.fillColor('#4b4c4c');
+    doc.moveTo(30, 842)
+        .bezierCurveTo(155, 748, 350, 705, 555, 770)
+        .lineTo(595, 800)
+        .lineTo(595, 842)
+        .closePath()
+        .fill();
+    doc.restore();
 
     doc.end();
 };

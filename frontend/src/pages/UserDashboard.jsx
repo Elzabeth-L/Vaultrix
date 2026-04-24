@@ -5,6 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import api, { buildApiUrl } from '../api';
 import ReviewModal from '../components/ReviewModal';
 import { clearAuth, getCurrentUser, setCurrentUser } from '../utils/auth';
+import { loadServices } from '../utils/services';
 
 function Sidebar({ active, setActive }) {
   const navigate = useNavigate();
@@ -372,6 +373,10 @@ function ProfilePanel() {
 
 export default function UserDashboard() {
   const [active, setActive] = useState('orders');
+
+  useEffect(() => {
+    loadServices(api).catch(() => {});
+  }, []);
 
   return (
     <div className="dashboard-layout">
