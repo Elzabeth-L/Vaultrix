@@ -10,13 +10,13 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(morgan('dev'));
 
-// Service routing map — prefix → target base URL
+// Service routing map — prefix (Gateway) → target base URL (Microservice)
 const services = {
-    '/users':    process.env.USER_SERVICE_URL    || 'http://user-service:3001',
-    '/orders':   process.env.ORDER_SERVICE_URL   || 'http://order-service:3002',
-    '/wallet':   process.env.WALLET_SERVICE_URL  || 'http://wallet-service:3003',
-    '/invoices': process.env.INVOICE_SERVICE_URL || 'http://invoice-service:3005',
-    '/reviews':  process.env.REVIEW_SERVICE_URL  || 'http://review-service:3006',
+    '/api/users':    process.env.USER_SERVICE_URL    || 'http://user-service:3001',
+    '/api/orders':   process.env.ORDER_SERVICE_URL   || 'http://order-service:3002',
+    '/api/wallet':   process.env.WALLET_SERVICE_URL  || 'http://wallet-service:3003',
+    '/api/invoices': process.env.INVOICE_SERVICE_URL || 'http://invoice-service:3005',
+    '/api/reviews':  process.env.REVIEW_SERVICE_URL  || 'http://review-service:3006',
 };
 
 for (const [prefix, target] of Object.entries(services)) {
@@ -25,7 +25,13 @@ for (const [prefix, target] of Object.entries(services)) {
         createProxyMiddleware({
             target,
             changeOrigin: true,
-            pathRewrite: (pathReq) => `${prefix}${pathReq}`,
+            // Express strips the mounted prefix (e.g., '/api/users'). 
+            // pathReq is the remaining path (e.g., '/login').
+            // We need to send it to the target service as '/users/login'.
+            pathRewrite: (pathReq) => {
+                const targetPrefix = prefix.replace('/api', ''); // e.g., '/users'
+                return `${targetPrefix}${pathReq}`;
+            },
             on: {
                 proxyReq: (proxyReq, req) => {
                     console.log(`[GW] ${req.method} ${prefix}${req.url} → ${target}`);
