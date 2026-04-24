@@ -50,6 +50,6 @@ for (const [prefix, target] of Object.entries(services)) {
 app.get('/health', (req, res) => res.json({ status: 'ok', service: 'api-gateway', timestamp: new Date().toISOString() }));
 
 // Bind to 0.0.0.0 so Docker exposes the port correctly
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`API Gateway running on port ${PORT}`);
+app.listen(PORT || 3000, '0.0.0.0', () => {
+    console.log(`API Gateway running on port ${PORT || 3000}`);
 });
