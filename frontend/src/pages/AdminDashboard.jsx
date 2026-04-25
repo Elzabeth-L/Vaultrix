@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Activity,
@@ -475,6 +475,8 @@ function ServicesManagement() {
   const [editingServiceId, setEditingServiceId] = useState(null);
   const [msg, setMsg] = useState(null);
   const [form, setForm] = useState(createEmptyServiceForm);
+  const editorRef = useRef(null);
+  const nameInputRef = useRef(null);
 
   const syncServicesFromCache = useCallback(() => setServices(getServices()), []);
 
@@ -498,6 +500,19 @@ function ServicesManagement() {
       window.removeEventListener('storage', syncServices);
     };
   }, [syncServicesFromCache, loadServicesFromApi]);
+
+  useEffect(() => {
+    if (!editingServiceId) return;
+
+    editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    const focusTimer = window.setTimeout(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select?.();
+    }, 200);
+
+    return () => window.clearTimeout(focusTimer);
+  }, [editingServiceId]);
 
   const handle = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
 
@@ -577,6 +592,8 @@ function ServicesManagement() {
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
+              border: editingServiceId === service.id ? '1px solid rgba(96, 165, 250, 0.9)' : '1px solid rgba(255,255,255,0.08)',
+              boxShadow: editingServiceId === service.id ? '0 0 0 3px rgba(59,130,246,0.18)' : undefined,
               backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${service.backgroundImage || DEFAULT_SERVICE_BACKGROUND}')`,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
@@ -605,15 +622,30 @@ function ServicesManagement() {
                 <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>ID: {service.id}</div>
               </div>
               <button className="btn btn-secondary btn-sm" onClick={() => startEditing(service)}>
-                <PencilLine size={13} /> Edit
+                <PencilLine size={13} /> {editingServiceId === service.id ? 'Editing' : 'Edit'}
               </button>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 0.8fr)', gap: '1.5rem' }}>
+      <div ref={editorRef} style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 0.8fr)', gap: '1.5rem' }}>
         <div className="card">
+          {editingServiceId && (
+            <div
+              style={{
+                marginBottom: '1rem',
+                padding: '0.85rem 1rem',
+                borderRadius: '0.9rem',
+                background: 'rgba(37, 99, 235, 0.14)',
+                border: '1px solid rgba(96, 165, 250, 0.28)',
+                color: '#dbeafe',
+                fontSize: '0.92rem',
+              }}
+            >
+              You are now editing <strong style={{ color: '#ffffff' }}>{form.name || editingServiceId}</strong>. Update the fields below and click <strong style={{ color: '#ffffff' }}>Save Changes</strong>.
+            </div>
+          )}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               {editingServiceId ? <PencilLine size={18} /> : <PlusCircle size={18} />}
@@ -629,7 +661,7 @@ function ServicesManagement() {
           <form onSubmit={submit}>
             <div className="form-group">
               <label>Service name</label>
-              <input name="name" className="form-control" placeholder="Gardening" value={form.name} onChange={handle} required />
+              <input ref={nameInputRef} name="name" className="form-control" placeholder="Gardening" value={form.name} onChange={handle} required />
             </div>
             <div className="form-group">
               <label>Service ID {editingServiceId ? '' : '(optional)'}</label>
