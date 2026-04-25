@@ -12,6 +12,9 @@ import {
   Briefcase,
   PlusCircle,
   Image as ImageIcon,
+  PencilLine,
+  Save,
+  X,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../api';
@@ -27,6 +30,37 @@ import {
 } from '../utils/services';
 
 const ORDER_TABS = ['PENDING', 'APPROVED', 'COMPLETED', 'REJECTED'];
+
+const createEmptyServiceForm = () => ({
+  name: '',
+  id: '',
+  icon: '',
+  description: '',
+  priceFrom: '',
+  category: '',
+  backgroundImage: '',
+  reviewCriteria: '',
+});
+
+const createServiceFormFromService = (service) => ({
+  name: service?.name || '',
+  id: service?.id || '',
+  icon: service?.icon || '',
+  description: service?.description || '',
+  priceFrom: String(service?.priceFrom || ''),
+  category: service?.category || '',
+  backgroundImage: service?.backgroundImage && service.backgroundImage !== DEFAULT_SERVICE_BACKGROUND ? service.backgroundImage : '',
+  reviewCriteria: Array.isArray(service?.reviewCriteria) ? service.reviewCriteria.join(', ') : '',
+});
+
+const createDraftForOrder = (order, service) => ({
+  name: service?.name || order.serviceName,
+  description: service?.description || order.description,
+  backgroundImage: service?.backgroundImage && service.backgroundImage !== DEFAULT_SERVICE_BACKGROUND ? service.backgroundImage : '',
+  priceFrom: String(service?.priceFrom || order.amount || ''),
+  category: service?.category || 'Custom',
+  reviewCriteria: Array.isArray(service?.reviewCriteria) ? service.reviewCriteria.join(', ') : '',
+});
 
 function Sidebar({ active, setActive }) {
   const navigate = useNavigate();
@@ -74,6 +108,55 @@ function StatusBadge({ status, paymentStatus }) {
   );
 }
 
+function PublishConfirmationModal({ order, draft, loading, onCancel, onConfirm }) {
+  if (!order) return null;
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(8px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
+      <div className="card animate-in" style={{ width: '100%', maxWidth: 560, padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <h2 style={{ marginBottom: '0.45rem' }}>Confirm Publish</h2>
+            <p style={{ color: '#94a3b8', lineHeight: 1.6, margin: 0 }}>
+              This will make <strong style={{ color: '#f8fafc' }}>{draft.name}</strong> visible in the public catalog for all users.
+            </p>
+          </div>
+          <button onClick={onCancel} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '0.25rem' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gap: '0.7rem', padding: '1rem', borderRadius: '1rem', background: 'rgba(15, 23, 42, 0.72)', border: '1px solid rgba(255,255,255,0.08)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <span style={{ color: '#cbd5e1' }}>Service</span>
+            <strong>{draft.name}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <span style={{ color: '#cbd5e1' }}>Category</span>
+            <strong>{draft.category || 'Custom'}</strong>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+            <span style={{ color: '#cbd5e1' }}>Price from</span>
+            <strong>${draft.priceFrom || order.amount}</strong>
+          </div>
+          <div style={{ color: '#cbd5e1', lineHeight: 1.6 }}>
+            {draft.description}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem' }}>
+          <button type="button" className="btn btn-secondary" onClick={onCancel} style={{ flex: 1 }}>
+            Cancel
+          </button>
+          <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={loading} style={{ flex: 1 }}>
+            {loading ? <span className="spinner" /> : 'Yes, Publish'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderManagement() {
   const [orders, setOrders] = useState([]);
   const [servicesById, setServicesById] = useState({});
@@ -83,6 +166,8 @@ function OrderManagement() {
   const [reason, setReason] = useState('');
   const [rejectFor, setRejectFor] = useState(null);
   const [serviceEdits, setServiceEdits] = useState({});
+  const [savingDraftFor, setSavingDraftFor] = useState(null);
+  const [publishTarget, setPublishTarget] = useState(null);
   const [msg, setMsg] = useState(null);
 
   const load = useCallback(async () => {
@@ -109,14 +194,7 @@ function OrderManagement() {
 
   const getDraftForOrder = (order) => {
     const service = getServiceMeta(order);
-    return serviceEdits[order.serviceId] || {
-      name: service?.name || order.serviceName,
-      description: service?.description || order.description,
-      backgroundImage: service?.backgroundImage && service.backgroundImage !== DEFAULT_SERVICE_BACKGROUND ? service.backgroundImage : '',
-      priceFrom: String(service?.priceFrom || order.amount || ''),
-      category: service?.category || 'Custom',
-      reviewCriteria: Array.isArray(service?.reviewCriteria) ? service.reviewCriteria.join(', ') : '',
-    };
+    return serviceEdits[order.serviceId] || createDraftForOrder(order, service);
   };
 
   const updateDraft = (order, field, value) => {
@@ -124,14 +202,7 @@ function OrderManagement() {
     setServiceEdits((current) => ({
       ...current,
       [order.serviceId]: {
-        ...(current[order.serviceId] || {
-          name: service?.name || order.serviceName,
-          description: service?.description || order.description,
-          backgroundImage: service?.backgroundImage && service.backgroundImage !== DEFAULT_SERVICE_BACKGROUND ? service.backgroundImage : '',
-          priceFrom: String(service?.priceFrom || order.amount || ''),
-          category: service?.category || 'Custom',
-          reviewCriteria: Array.isArray(service?.reviewCriteria) ? service.reviewCriteria.join(', ') : '',
-        }),
+        ...(current[order.serviceId] || createDraftForOrder(order, service)),
         [field]: value,
       },
     }));
@@ -156,6 +227,19 @@ function OrderManagement() {
 
     const refreshedServices = await loadServices(api).catch(() => getServices());
     setServicesById(Object.fromEntries((refreshedServices || []).map((service) => [service.id, service])));
+  };
+
+  const saveCustomServiceDraft = async (order) => {
+    setSavingDraftFor(order.serviceId);
+    setMsg(null);
+    try {
+      await syncCustomService(order, false);
+      setMsg({ type: 'success', text: `${getDraftForOrder(order).name} was updated successfully.` });
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to save the service details.' });
+    } finally {
+      setSavingDraftFor(null);
+    }
   };
 
   const doAction = async (orderId, action, body = {}) => {
@@ -213,7 +297,8 @@ function OrderManagement() {
 
     try {
       await syncCustomService(order, true);
-      setMsg({ type: 'success', text: `${order.serviceName} is now published for everyone.` });
+      setMsg({ type: 'success', text: `${getDraftForOrder(order).name} is now published for everyone.` });
+      setPublishTarget(null);
       load();
     } catch (err) {
       setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to publish this service.' });
@@ -227,9 +312,9 @@ function OrderManagement() {
       {msg && <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '1.5rem' }}>{msg.text}</div>}
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-        {ORDER_TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)} className={`btn ${tab === t ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
-            {t}
+        {ORDER_TABS.map((nextTab) => (
+          <button key={nextTab} onClick={() => setTab(nextTab)} className={`btn ${tab === nextTab ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '0.4rem 1rem', fontSize: '0.8rem' }}>
+            {nextTab}
           </button>
         ))}
         <button className="btn btn-secondary btn-sm" onClick={load} style={{ marginLeft: 'auto' }}><RefreshCw size={13} /></button>
@@ -240,128 +325,145 @@ function OrderManagement() {
       ) : orders.length === 0 ? (
         <div className="empty-state"><Clock size={40} /><p>No {tab.toLowerCase()} orders.</p></div>
       ) : (
-        orders.map((order) => (
-          <div key={order._id} className="card" style={{ marginBottom: '1rem', padding: '1.25rem' }}>
-            {(() => {
-              const service = getServiceMeta(order);
-              const draft = getDraftForOrder(order);
-              const canPublish = order.isCustomService && service?.visibility !== 'PUBLIC' && order.status === 'COMPLETED' && order.paymentStatus === 'PAID';
-              return (
-                <>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>{order.serviceName}</span>
-                  <StatusBadge status={order.status} paymentStatus={order.paymentStatus} />
-                  {order.isCustomService && (
-                    <span className="badge badge-primary">{service?.visibility === 'PUBLIC' ? 'PUBLISHED' : 'CUSTOM'}</span>
+        orders.map((order) => {
+          const service = getServiceMeta(order);
+          const draft = getDraftForOrder(order);
+          const canPublish = order.isCustomService && service?.visibility !== 'PUBLIC' && order.status === 'COMPLETED' && order.paymentStatus === 'PAID';
+
+          return (
+            <div key={order._id} className="card" style={{ marginBottom: '1rem', padding: '1.25rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '1rem' }}>{draft.name || order.serviceName}</span>
+                    <StatusBadge status={order.status} paymentStatus={order.paymentStatus} />
+                    {order.isCustomService && (
+                      <span className="badge badge-primary">{service?.visibility === 'PUBLIC' ? 'PUBLISHED' : 'CUSTOM'}</span>
+                    )}
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.83rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
+                    <span>${order.amount}</span>
+                    <span>User: {order.userName || order.userId?.slice(-6)}</span>
+                    {order.userEmail && <span>Email: {order.userEmail}</span>}
+                    <span>{order.address}</span>
+                    <span>{new Date(order.scheduledDate).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                  </div>
+                  <div style={{ color: '#94a3b8', fontSize: '0.83rem', marginTop: '0.35rem' }}>
+                    {order.description}
+                  </div>
+                  {order.rejectionReason && (
+                    <div style={{ marginTop: '0.5rem', color: '#f87171', fontSize: '0.83rem' }}>Rejection reason: {order.rejectionReason}</div>
                   )}
                 </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.83rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
-                  <span>${order.amount}</span>
-                  <span>User: {order.userName || order.userId?.slice(-6)}</span>
-                  {order.userEmail && <span>Email: {order.userEmail}</span>}
-                  <span>{order.address}</span>
-                  <span>{new Date(order.scheduledDate).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-                </div>
-                <div style={{ color: '#94a3b8', fontSize: '0.83rem', marginTop: '0.35rem' }}>
-                  {order.description}
-                </div>
-                {order.rejectionReason && (
-                  <div style={{ marginTop: '0.5rem', color: '#f87171', fontSize: '0.83rem' }}>Rejection reason: {order.rejectionReason}</div>
-                )}
-              </div>
 
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {order.status === 'PENDING' && (
-                  <>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {order.status === 'PENDING' && (
+                    <>
+                      <button
+                        className="btn btn-success btn-sm"
+                        disabled={acting === order._id + 'approve'}
+                        onClick={() => (order.isCustomService ? approveCustomOrder(order) : doAction(order._id, 'approve'))}
+                      >
+                        {acting === order._id + 'approve' ? <span className="spinner" /> : <><CheckCircle size={13} /> Approve</>}
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => { setRejectFor(order._id); setMsg(null); }}>
+                        <XCircle size={13} /> Reject
+                      </button>
+                    </>
+                  )}
+                  {order.status === 'APPROVED' && order.paymentStatus === 'PAID' && (
+                    <button className="btn btn-primary btn-sm" disabled={acting === order._id + 'complete'} onClick={() => doAction(order._id, 'complete')}>
+                      {acting === order._id + 'complete' ? <span className="spinner" /> : <><Flag size={13} /> Mark Complete</>}
+                    </button>
+                  )}
+                  {order.status === 'APPROVED' && order.paymentStatus === 'UNPAID' && (
+                    <span style={{ fontSize: '0.8rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                      <Clock size={13} /> Awaiting payment
+                    </span>
+                  )}
+                  {canPublish && (
                     <button
-                      className="btn btn-success btn-sm"
-                      disabled={acting === order._id + 'approve'}
-                      onClick={() => (order.isCustomService ? approveCustomOrder(order) : doAction(order._id, 'approve'))}
+                      className="btn btn-secondary btn-sm"
+                      disabled={acting === order._id + 'publish'}
+                      onClick={() => setPublishTarget(order)}
+                      style={{ borderColor: '#22c55e', color: '#86efac' }}
                     >
-                      {acting === order._id + 'approve' ? <span className="spinner" /> : <><CheckCircle size={13} /> Approve</>}
+                      <PlusCircle size={13} /> Publish
                     </button>
-                    <button className="btn btn-danger btn-sm" onClick={() => { setRejectFor(order._id); setMsg(null); }}>
-                      <XCircle size={13} /> Reject
-                    </button>
-                  </>
-                )}
-                {order.status === 'APPROVED' && order.paymentStatus === 'PAID' && (
-                  <button className="btn btn-primary btn-sm" disabled={acting === order._id + 'complete'} onClick={() => doAction(order._id, 'complete')}>
-                    {acting === order._id + 'complete' ? <span className="spinner" /> : <><Flag size={13} /> Mark Complete</>}
-                  </button>
-                )}
-                {order.status === 'APPROVED' && order.paymentStatus === 'UNPAID' && (
-                  <span style={{ fontSize: '0.8rem', color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                    <Clock size={13} /> Awaiting payment
-                  </span>
-                )}
-                {canPublish && (
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    disabled={acting === order._id + 'publish'}
-                    onClick={() => publishCompletedService(order)}
-                    style={{ borderColor: '#22c55e', color: '#86efac' }}
-                  >
-                    {acting === order._id + 'publish' ? <span className="spinner" /> : <><PlusCircle size={13} /> Publish</>}
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
+
+              {rejectFor === order._id && (
+                <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input className="form-control" placeholder="Required: e.g. the requested date is unavailable" value={reason} onChange={(event) => setReason(event.target.value)} style={{ flex: 1, minWidth: 260 }} />
+                  <button className="btn btn-danger btn-sm" disabled={acting === order._id + 'reject'} onClick={() => doAction(order._id, 'reject', { reason })}>
+                    {acting === order._id + 'reject' ? <span className="spinner" /> : 'Send Rejection'}
+                  </button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => { setRejectFor(null); setReason(''); }}>Cancel</button>
+                </div>
+              )}
+
+              {order.isCustomService && (
+                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'grid', gap: '0.85rem' }}>
+                  <div style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>
+                    {service?.visibility === 'PUBLIC'
+                      ? 'Published custom service details'
+                      : 'Admin service details for this private custom request'}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Service name</label>
+                      <input className="form-control" value={draft.name} onChange={(event) => updateDraft(order, 'name', event.target.value)} />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Category</label>
+                      <input className="form-control" value={draft.category} onChange={(event) => updateDraft(order, 'category', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Description for user</label>
+                    <textarea className="form-control" rows={3} value={draft.description} onChange={(event) => updateDraft(order, 'description', event.target.value)} style={{ resize: 'vertical' }} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Background image URL</label>
+                      <input className="form-control" placeholder="https://example.com/image.jpg" value={draft.backgroundImage} onChange={(event) => updateDraft(order, 'backgroundImage', event.target.value)} />
+                    </div>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label>Publish price from ($)</label>
+                      <input className="form-control" type="number" min="1" value={draft.priceFrom} onChange={(event) => updateDraft(order, 'priceFrom', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Review criteria</label>
+                    <input className="form-control" placeholder="Quality, Communication, Value for Money" value={draft.reviewCriteria} onChange={(event) => updateDraft(order, 'reviewCriteria', event.target.value)} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <button className="btn btn-secondary btn-sm" disabled={savingDraftFor === order.serviceId} onClick={() => saveCustomServiceDraft(order)}>
+                      {savingDraftFor === order.serviceId ? <span className="spinner" /> : <><Save size={13} /> Save Service Details</>}
+                    </button>
+                    {canPublish && (
+                      <button className="btn btn-primary btn-sm" disabled={acting === order._id + 'publish'} onClick={() => setPublishTarget(order)}>
+                        <PlusCircle size={13} /> Review & Publish
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
+          );
+        })
+      )}
 
-            {rejectFor === order._id && (
-              <div style={{ marginTop: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                <input className="form-control" placeholder="Required: e.g. the requested date is unavailable" value={reason} onChange={(e) => setReason(e.target.value)} style={{ flex: 1, minWidth: 260 }} />
-                <button className="btn btn-danger btn-sm" disabled={acting === order._id + 'reject'} onClick={() => doAction(order._id, 'reject', { reason })}>
-                  {acting === order._id + 'reject' ? <span className="spinner" /> : 'Send Rejection'}
-                </button>
-                <button className="btn btn-secondary btn-sm" onClick={() => { setRejectFor(null); setReason(''); }}>Cancel</button>
-              </div>
-            )}
-
-            {order.isCustomService && (
-              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'grid', gap: '0.85rem' }}>
-                <div style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>
-                  {service?.visibility === 'PUBLIC'
-                    ? 'Published custom service details'
-                    : 'Admin service details for this private custom request'}
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label>Service name</label>
-                    <input className="form-control" value={draft.name} onChange={(e) => updateDraft(order, 'name', e.target.value)} />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label>Category</label>
-                    <input className="form-control" value={draft.category} onChange={(e) => updateDraft(order, 'category', e.target.value)} />
-                  </div>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>Description for user</label>
-                  <textarea className="form-control" rows={3} value={draft.description} onChange={(e) => updateDraft(order, 'description', e.target.value)} style={{ resize: 'vertical' }} />
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label>Background image URL</label>
-                    <input className="form-control" placeholder="https://example.com/image.jpg" value={draft.backgroundImage} onChange={(e) => updateDraft(order, 'backgroundImage', e.target.value)} />
-                  </div>
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label>Publish price from ($)</label>
-                    <input className="form-control" type="number" min="1" value={draft.priceFrom} onChange={(e) => updateDraft(order, 'priceFrom', e.target.value)} />
-                  </div>
-                </div>
-                <div className="form-group" style={{ margin: 0 }}>
-                  <label>Review criteria</label>
-                  <input className="form-control" placeholder="Quality, Communication, Value for Money" value={draft.reviewCriteria} onChange={(e) => updateDraft(order, 'reviewCriteria', e.target.value)} />
-                </div>
-              </div>
-            )}
-                </>
-              );
-            })()}
-          </div>
-        ))
+      {publishTarget && (
+        <PublishConfirmationModal
+          order={publishTarget}
+          draft={getDraftForOrder(publishTarget)}
+          loading={acting === publishTarget._id + 'publish'}
+          onCancel={() => setPublishTarget(null)}
+          onConfirm={() => publishCompletedService(publishTarget)}
+        />
       )}
     </div>
   );
@@ -370,17 +472,9 @@ function OrderManagement() {
 function ServicesManagement() {
   const [services, setServices] = useState(() => getServices());
   const [saving, setSaving] = useState(false);
+  const [editingServiceId, setEditingServiceId] = useState(null);
   const [msg, setMsg] = useState(null);
-  const [form, setForm] = useState({
-    name: '',
-    id: '',
-    icon: '',
-    description: '',
-    priceFrom: '',
-    category: '',
-    backgroundImage: '',
-    reviewCriteria: '',
-  });
+  const [form, setForm] = useState(createEmptyServiceForm);
 
   const syncServicesFromCache = useCallback(() => setServices(getServices()), []);
 
@@ -405,10 +499,21 @@ function ServicesManagement() {
     };
   }, [syncServicesFromCache, loadServicesFromApi]);
 
-  const handle = (e) => setForm((current) => ({ ...current, [e.target.name]: e.target.value }));
+  const handle = (event) => setForm((current) => ({ ...current, [event.target.name]: event.target.value }));
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const resetEditor = () => {
+    setEditingServiceId(null);
+    setForm(createEmptyServiceForm());
+  };
+
+  const startEditing = (service) => {
+    setEditingServiceId(service.id);
+    setForm(createServiceFormFromService(service));
+    setMsg(null);
+  };
+
+  const submit = async (event) => {
+    event.preventDefault();
     setMsg(null);
 
     if (!form.name.trim() || !form.description.trim() || !form.priceFrom || Number(form.priceFrom) <= 0) {
@@ -416,30 +521,28 @@ function ServicesManagement() {
       return;
     }
 
+    const payload = {
+      id: form.id,
+      name: form.name,
+      icon: form.icon,
+      description: form.description,
+      priceFrom: form.priceFrom,
+      category: form.category,
+      backgroundImage: form.backgroundImage,
+      reviewCriteria: form.reviewCriteria,
+    };
+
     setSaving(true);
     try {
-      const service = await createService(api, {
-        id: form.id,
-        name: form.name,
-        icon: form.icon,
-        description: form.description,
-        priceFrom: form.priceFrom,
-        category: form.category,
-        backgroundImage: form.backgroundImage,
-        reviewCriteria: form.reviewCriteria,
-      });
+      if (editingServiceId) {
+        const service = await updateService(api, editingServiceId, payload);
+        setMsg({ type: 'success', text: `${service.name} was updated.` });
+      } else {
+        const service = await createService(api, payload);
+        setMsg({ type: 'success', text: `${service.name} was added to the catalog.` });
+      }
 
-      setMsg({ type: 'success', text: `${service.name} was added to the catalog.` });
-      setForm({
-        name: '',
-        id: '',
-        icon: '',
-        description: '',
-        priceFrom: '',
-        category: '',
-        backgroundImage: '',
-        reviewCriteria: '',
-      });
+      resetEditor();
       loadServicesFromApi();
     } catch (error) {
       setMsg({ type: 'error', text: error.response?.data?.message || error.message || 'Could not save service.' });
@@ -470,7 +573,7 @@ function ServicesManagement() {
             key={service.id}
             className="card"
             style={{
-              minHeight: 230,
+              minHeight: 250,
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
@@ -479,26 +582,31 @@ function ServicesManagement() {
               backgroundPosition: 'center',
             }}
           >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-                <div style={{ fontSize: '2rem' }}>{service.icon}</div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
-                  <span className={`badge ${service.isCustom ? 'badge-success' : 'badge-primary'}`}>{service.isCustom ? 'CUSTOM' : 'BUILT-IN'}</span>
-                  <span className={`badge ${service.visibility === 'PRIVATE' ? 'badge-warn' : 'badge-primary'}`}>{service.visibility || 'PUBLIC'}</span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+              <div style={{ fontSize: '2rem' }}>{service.icon}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                <span className={`badge ${service.isCustom ? 'badge-success' : 'badge-primary'}`}>{service.isCustom ? 'CUSTOM' : 'CATALOG'}</span>
+                <span className={`badge ${service.visibility === 'PRIVATE' ? 'badge-warn' : 'badge-primary'}`}>{service.visibility || 'PUBLIC'}</span>
+              </div>
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>{service.name}</h3>
+              <div style={{ color: '#dbe4f0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{service.category}</div>
+              {service.ownerUserName && (
+                <div style={{ color: '#cbd5e1', fontSize: '0.78rem', marginBottom: '0.45rem' }}>
+                  Owner: {service.ownerUserName}
                 </div>
-              </div>
-              <div>
-                <h3 style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>{service.name}</h3>
-                <div style={{ color: '#dbe4f0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{service.category}</div>
-                {service.ownerUserName && (
-                  <div style={{ color: '#cbd5e1', fontSize: '0.78rem', marginBottom: '0.45rem' }}>
-                    Owner: {service.ownerUserName}
-                  </div>
-                )}
-                <p style={{ color: '#dbe4f0', fontSize: '0.88rem', lineHeight: 1.6 }}>{service.description}</p>
-              </div>
+              )}
+              <p style={{ color: '#dbe4f0', fontSize: '0.88rem', lineHeight: 1.6 }}>{service.description}</p>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
-              <span style={{ color: '#6ee7b7', fontWeight: 700 }}>From ${service.priceFrom}</span>
-              <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>ID: {service.id}</span>
+              <div>
+                <div style={{ color: '#6ee7b7', fontWeight: 700 }}>From ${service.priceFrom}</div>
+                <div style={{ color: '#94a3b8', fontSize: '0.78rem' }}>ID: {service.id}</div>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => startEditing(service)}>
+                <PencilLine size={13} /> Edit
+              </button>
             </div>
           </div>
         ))}
@@ -506,9 +614,16 @@ function ServicesManagement() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.2fr) minmax(280px, 0.8fr)', gap: '1.5rem' }}>
         <div className="card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
-            <PlusCircle size={18} />
-            <h2 style={{ margin: 0 }}>Add Service</h2>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {editingServiceId ? <PencilLine size={18} /> : <PlusCircle size={18} />}
+              <h2 style={{ margin: 0 }}>{editingServiceId ? 'Edit Service' : 'Add Service'}</h2>
+            </div>
+            {editingServiceId && (
+              <button type="button" className="btn btn-secondary btn-sm" onClick={resetEditor}>
+                <X size={13} /> Cancel Edit
+              </button>
+            )}
           </div>
 
           <form onSubmit={submit}>
@@ -517,10 +632,10 @@ function ServicesManagement() {
               <input name="name" className="form-control" placeholder="Gardening" value={form.name} onChange={handle} required />
             </div>
             <div className="form-group">
-              <label>Service ID (optional)</label>
-              <input name="id" className="form-control" placeholder="gardening-service" value={form.id} onChange={handle} />
+              <label>Service ID {editingServiceId ? '' : '(optional)'}</label>
+              <input name="id" className="form-control" placeholder="gardening-service" value={form.id} onChange={handle} disabled={Boolean(editingServiceId)} />
               <span style={{ display: 'block', marginTop: '0.35rem', fontSize: '0.75rem', color: '#94a3b8' }}>
-                Leave blank to auto-generate from the name.
+                {editingServiceId ? 'Service IDs stay fixed once created.' : 'Leave blank to auto-generate from the name.'}
               </span>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
@@ -554,9 +669,16 @@ function ServicesManagement() {
                 Optional. Separate criteria with commas.
               </span>
             </div>
-            <button type="submit" className="btn btn-primary" disabled={saving}>
-              {saving ? <span className="spinner" /> : <><PlusCircle size={15} /> Add Service</>}
-            </button>
+            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <button type="submit" className="btn btn-primary" disabled={saving}>
+                {saving ? <span className="spinner" /> : editingServiceId ? <><Save size={15} /> Save Changes</> : <><PlusCircle size={15} /> Add Service</>}
+              </button>
+              {editingServiceId && (
+                <button type="button" className="btn btn-secondary" onClick={resetEditor}>
+                  Clear
+                </button>
+              )}
+            </div>
           </form>
         </div>
 
@@ -601,17 +723,17 @@ function Statistics() {
   useEffect(() => {
     (async () => {
       try {
-        const [p, a, c, r] = await Promise.all([
+        const [pending, approved, completed, rejected] = await Promise.all([
           api.get('/orders?status=PENDING'),
           api.get('/orders?status=APPROVED'),
           api.get('/orders?status=COMPLETED'),
           api.get('/orders?status=REJECTED'),
         ]);
         const all = [
-          ...(p.data?.orders || []),
-          ...(a.data?.orders || []),
-          ...(c.data?.orders || []),
-          ...(r.data?.orders || []),
+          ...(pending.data?.orders || []),
+          ...(approved.data?.orders || []),
+          ...(completed.data?.orders || []),
+          ...(rejected.data?.orders || []),
         ];
         setAllOrders(all);
       } catch {
@@ -624,9 +746,9 @@ function Statistics() {
 
   if (loading) return <div style={{ padding: '3rem', textAlign: 'center' }}><span className="spinner" /></div>;
 
-  const counts = ORDER_TABS.map((t) => ({ status: t, count: allOrders.filter((o) => o.status === t).length }));
-  const revenue = allOrders.filter((o) => o.paymentStatus === 'PAID').reduce((s, o) => s + (o.amount || 0), 0);
-  const pending = allOrders.filter((o) => o.paymentStatus === 'UNPAID' && o.status === 'APPROVED').reduce((s, o) => s + (o.amount || 0), 0);
+  const counts = ORDER_TABS.map((status) => ({ status, count: allOrders.filter((order) => order.status === status).length }));
+  const revenue = allOrders.filter((order) => order.paymentStatus === 'PAID').reduce((sum, order) => sum + (order.amount || 0), 0);
+  const pending = allOrders.filter((order) => order.paymentStatus === 'UNPAID' && order.status === 'APPROVED').reduce((sum, order) => sum + (order.amount || 0), 0);
 
   return (
     <div className="animate-in">

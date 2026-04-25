@@ -9,6 +9,7 @@ const serviceSchema = new mongoose.Schema({
     category: { type: String, trim: true, default: 'General' },
     backgroundImage: { type: String, trim: true },
     reviewCriteria: [{ type: String, trim: true }],
+    isCustom: { type: Boolean, default: true },
     visibility: { type: String, enum: ['PUBLIC', 'PRIVATE'], default: 'PUBLIC' },
     ownerUserId: { type: String, trim: true },
     ownerUserName: { type: String, trim: true },

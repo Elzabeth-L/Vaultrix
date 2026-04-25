@@ -5,6 +5,7 @@ import api from '../api';
 import { getServices, loadServices, SERVICES_REGISTRY_EVENT, DEFAULT_SERVICE_BACKGROUND } from '../utils/services';
 import RequestServiceModal from '../components/RequestServiceModal';
 import CreateCustomServiceModal from '../components/CreateCustomServiceModal';
+import ServicePreviewModal from '../components/ServicePreviewModal';
 import { clearAuth, getCurrentUser } from '../utils/auth';
 
 export default function ServiceCatalog() {
@@ -12,10 +13,12 @@ export default function ServiceCatalog() {
   const navigate = useNavigate();
   const [services, setServices] = useState(() => getServices());
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(null);
+  const [previewService, setPreviewService] = useState(null);
+  const [requestService, setRequestService] = useState(null);
   const [category, setCategory] = useState('All');
   const [showCustomModal, setShowCustomModal] = useState(false);
-  const [reviewSummaries, setReviewSummaries] = useState({});
+  const [previewReviewSummary, setPreviewReviewSummary] = useState(null);
+  const [previewReviewsLoading, setPreviewReviewsLoading] = useState(false);
 
   useEffect(() => {
     const syncServices = () => setServices(getServices());
@@ -31,51 +34,57 @@ export default function ServiceCatalog() {
   useEffect(() => {
     let cancelled = false;
 
-    const loadReviewSummaries = async () => {
-      if (!services.length) {
-        setReviewSummaries({});
+    const loadPreviewReviews = async () => {
+      if (!previewService) {
+        setPreviewReviewSummary(null);
+        setPreviewReviewsLoading(false);
         return;
       }
 
-      const results = await Promise.allSettled(
-        services.map((service) => api.get(`/reviews/service/${service.id}`))
-      );
+      setPreviewReviewsLoading(true);
+      try {
+        const response = await api.get(`/reviews/service/${previewService.id}`);
+        if (cancelled) return;
 
-      if (cancelled) return;
-
-      const nextSummaries = {};
-      results.forEach((result, index) => {
-        const serviceId = services[index]?.id;
-        if (!serviceId) return;
-
-        if (result.status === 'fulfilled') {
-          nextSummaries[serviceId] = {
-            avgOverall: result.value.data?.avgOverall || null,
-            total: Number(result.value.data?.total) || 0,
-            reviews: Array.isArray(result.value.data?.reviews) ? result.value.data.reviews.slice(0, 2) : [],
-          };
-          return;
+        setPreviewReviewSummary({
+          avgOverall: response.data?.avgOverall || null,
+          total: Number(response.data?.total) || 0,
+          reviews: Array.isArray(response.data?.reviews) ? response.data.reviews.slice(0, 3) : [],
+        });
+      } catch {
+        if (!cancelled) {
+          setPreviewReviewSummary({ avgOverall: null, total: 0, reviews: [] });
         }
-
-        nextSummaries[serviceId] = { avgOverall: null, total: 0, reviews: [] };
-      });
-
-      setReviewSummaries(nextSummaries);
+      } finally {
+        if (!cancelled) {
+          setPreviewReviewsLoading(false);
+        }
+      }
     };
 
-    loadReviewSummaries().catch(() => setReviewSummaries({}));
+    loadPreviewReviews();
     return () => { cancelled = true; };
-  }, [services]);
+  }, [previewService]);
 
-  const categories = useMemo(() => ['All', ...new Set(services.map((s) => s.category))], [services]);
-  const filtered = services.filter((s) =>
-    (category === 'All' || s.category === category) &&
-    (`${s.name} ${s.description}`).toLowerCase().includes(search.toLowerCase())
+  const categories = useMemo(() => ['All', ...new Set(services.map((service) => service.category))], [services]);
+  const filtered = services.filter((service) =>
+    (category === 'All' || service.category === category) &&
+    (`${service.name} ${service.description}`).toLowerCase().includes(search.toLowerCase())
   );
 
   const logout = () => {
     clearAuth();
     navigate('/login');
+  };
+
+  const openRequestFlow = (service) => {
+    if (!user) {
+      navigate('/login');
+      return;
+    }
+
+    setPreviewService(null);
+    setRequestService(service);
   };
 
   return (
@@ -121,7 +130,7 @@ export default function ServiceCatalog() {
             className="form-control"
             placeholder="Search services..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(event) => setSearch(event.target.value)}
             style={{ paddingLeft: '3rem', fontSize: '1rem' }}
           />
         </div>
@@ -150,9 +159,9 @@ export default function ServiceCatalog() {
               display: 'flex',
               flexDirection: 'column',
               gap: '0.9rem',
-              cursor: 'default',
+              cursor: 'pointer',
               transition: 'transform 0.2s',
-              minHeight: 410,
+              minHeight: 320,
               justifyContent: 'space-between',
               backgroundImage: `linear-gradient(180deg, rgba(11,12,18,0.18) 0%, rgba(11,12,18,0.74) 48%, rgba(11,12,18,0.95) 100%), url('${service.backgroundImage || DEFAULT_SERVICE_BACKGROUND}')`,
               backgroundSize: 'cover',
@@ -160,8 +169,9 @@ export default function ServiceCatalog() {
               backgroundRepeat: 'no-repeat',
               overflow: 'hidden',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-4px)'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.transform = 'translateY(0)'; }}
+            onClick={() => setPreviewService(service)}
+            onMouseEnter={(event) => { event.currentTarget.style.transform = 'translateY(-4px)'; }}
+            onMouseLeave={(event) => { event.currentTarget.style.transform = 'translateY(0)'; }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
               <div style={{ fontSize: '2.5rem', width: 60, height: 60, display: 'grid', placeItems: 'center', borderRadius: 18, background: 'rgba(8, 10, 15, 0.42)', backdropFilter: 'blur(8px)', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)' }}>{service.icon}</div>
@@ -174,30 +184,15 @@ export default function ServiceCatalog() {
                 )}
               </div>
             </div>
+
             <div>
               <h3 style={{ fontWeight: 700, marginBottom: '0.35rem', fontSize: '1.1rem', color: '#f8fafc' }}>{service.name}</h3>
               <p style={{ color: '#dbe4f0', fontSize: '0.92rem', lineHeight: 1.6 }}>{service.description}</p>
             </div>
 
-            <div style={{ display: 'grid', gap: '0.6rem', padding: '0.9rem 1rem', borderRadius: '1rem', background: 'rgba(8, 10, 15, 0.42)', border: '1px solid rgba(255,255,255,0.08)', backdropFilter: 'blur(8px)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#fbbf24', fontWeight: 700 }}>
-                <Star size={15} fill="#fbbf24" />
-                <span>{reviewSummaries[service.id]?.avgOverall ? `${reviewSummaries[service.id].avgOverall}★` : 'No ratings yet'}</span>
-                <span style={{ color: '#cbd5e1', fontWeight: 500 }}>
-                  {reviewSummaries[service.id]?.avgOverall ? `(${reviewSummaries[service.id].total} ratings)` : ''}
-                </span>
-              </div>
-              {reviewSummaries[service.id]?.reviews?.length ? (
-                reviewSummaries[service.id].reviews.map((review) => (
-                  <div key={review._id} style={{ color: '#dbe4f0', fontSize: '0.82rem', lineHeight: 1.5 }}>
-                    <span style={{ color: '#f8fafc', fontWeight: 600 }}>{review.overall}★</span> {review.comment || 'Rated this service highly.'}
-                  </div>
-                ))
-              ) : (
-                <div style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>
-                  Reviews from completed bookings will appear here for everyone to see.
-                </div>
-              )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', color: '#cbd5e1', fontSize: '0.82rem' }}>
+              <Star size={14} />
+              <span>Tap to preview details</span>
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', gap: '1rem' }}>
@@ -205,9 +200,9 @@ export default function ServiceCatalog() {
               <button
                 className="btn btn-primary"
                 style={{ padding: '0.5rem 1rem', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.4rem', boxShadow: '0 10px 30px rgba(0,0,0,0.25)' }}
-                onClick={() => {
-                  if (!user) return navigate('/login');
-                  setSelected(service);
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openRequestFlow(service);
                 }}
               >
                 Request <ArrowRight size={14} />
@@ -235,7 +230,10 @@ export default function ServiceCatalog() {
           <button
             className="btn btn-primary"
             onClick={() => {
-              if (!user) return navigate('/login');
+              if (!user) {
+                navigate('/login');
+                return;
+              }
               setShowCustomModal(true);
             }}
           >
@@ -244,11 +242,21 @@ export default function ServiceCatalog() {
         </div>
       </div>
 
-      {selected && (
+      {previewService && (
+        <ServicePreviewModal
+          service={previewService}
+          reviewSummary={previewReviewSummary}
+          loading={previewReviewsLoading}
+          onClose={() => setPreviewService(null)}
+          onRequest={() => openRequestFlow(previewService)}
+        />
+      )}
+
+      {requestService && (
         <RequestServiceModal
-          service={selected}
-          onClose={() => setSelected(null)}
-          onSuccess={() => { setSelected(null); navigate('/dashboard/user'); }}
+          service={requestService}
+          onClose={() => setRequestService(null)}
+          onSuccess={() => { setRequestService(null); navigate('/dashboard/user'); }}
         />
       )}
 

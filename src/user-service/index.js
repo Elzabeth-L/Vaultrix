@@ -108,6 +108,10 @@ const DEFAULT_SERVICES = [
     },
 ];
 
+const DEFAULT_SERVICE_MAP = new Map(
+    DEFAULT_SERVICES.map((service) => [service.serviceId, service]),
+);
+
 connectDB();
 
 const ok = (res, data, status = 200) => res.status(status).json({ success: true, ...data });
@@ -161,6 +165,50 @@ const slugify = (value = '') =>
 const createCustomServiceId = (name = 'custom-service', userId = 'user') =>
     `${slugify(name)}-${String(userId).slice(-6)}-${Date.now().toString(36)}`;
 
+const isDefaultServiceId = (serviceId = '') =>
+    DEFAULT_SERVICE_MAP.has(String(serviceId).trim().toLowerCase());
+
+const mergeDefaultService = (baseService, overrideService) => {
+    const override = overrideService?.toObject ? overrideService.toObject() : overrideService;
+    if (!override) return { ...baseService };
+
+    return {
+        ...baseService,
+        ...override,
+        serviceId: baseService.serviceId,
+        isCustom: false,
+        visibility: 'PUBLIC',
+        ownerUserId: null,
+        ownerUserName: null,
+        ownerUserEmail: null,
+    };
+};
+
+const findOrCreateEditableService = async (serviceId, userId) => {
+    const normalizedServiceId = String(serviceId || '').trim().toLowerCase();
+    let service = await Service.findOne({ serviceId: normalizedServiceId, isActive: true });
+
+    if (service) return service;
+    if (!isDefaultServiceId(normalizedServiceId)) return null;
+
+    const defaultService = DEFAULT_SERVICE_MAP.get(normalizedServiceId);
+    service = new Service({
+        serviceId: normalizedServiceId,
+        name: defaultService.name,
+        icon: defaultService.icon,
+        description: defaultService.description,
+        priceFrom: defaultService.priceFrom,
+        category: defaultService.category,
+        backgroundImage: defaultService.backgroundImage,
+        reviewCriteria: defaultService.reviewCriteria,
+        isCustom: false,
+        visibility: 'PUBLIC',
+        createdBy: String(userId || 'admin'),
+    });
+
+    return service;
+};
+
 const sanitizeService = (service, options = {}) => {
     const { includeOwnerDetails = false } = options;
     const source = service.toObject ? service.toObject() : service;
@@ -179,6 +227,7 @@ const sanitizeService = (service, options = {}) => {
         visibility: source.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
         ownerUserId: source.ownerUserId || null,
         ownerUserName: includeOwnerDetails ? source.ownerUserName || null : null,
+        ownerUserEmail: includeOwnerDetails ? source.ownerUserEmail || null : null,
         publishedAt: source.publishedAt || null,
         publishedBy: source.publishedBy || null,
         createdBy: source.createdBy || null,
@@ -299,10 +348,24 @@ app.get('/users/services', async (req, res) => {
             serviceFilter.visibility = 'PUBLIC';
         }
 
-        const customServices = await Service.find(serviceFilter).sort({ createdAt: -1 });
+        const persistedServices = await Service.find(serviceFilter).sort({ createdAt: -1 });
+        const defaultOverrides = new Map();
+        const customServices = [];
+
+        persistedServices.forEach((service) => {
+            if (isDefaultServiceId(service.serviceId)) {
+                defaultOverrides.set(service.serviceId, service);
+                return;
+            }
+            customServices.push(service);
+        });
+
         ok(res, {
             services: [
-                ...DEFAULT_SERVICES.map((service) => sanitizeService(service, { includeOwnerDetails })),
+                ...DEFAULT_SERVICES.map((service) => sanitizeService(
+                    mergeDefaultService(service, defaultOverrides.get(service.serviceId)),
+                    { includeOwnerDetails },
+                )),
                 ...customServices.map((service) => sanitizeService(service, { includeOwnerDetails })),
             ],
         });
@@ -333,6 +396,7 @@ app.post('/users/services', verifyToken, verifyAdmin, async (req, res) => {
             category: String(req.body.category || 'General').trim(),
             backgroundImage: String(req.body.backgroundImage || '').trim() || DEFAULT_SERVICE_BACKGROUND,
             reviewCriteria: parseReviewCriteria(req.body.reviewCriteria),
+            isCustom: false,
             visibility: 'PUBLIC',
             createdBy: req.user.id,
         });
@@ -361,6 +425,7 @@ app.post('/users/services/custom', verifyToken, async (req, res) => {
             category: 'Custom',
             backgroundImage: DEFAULT_SERVICE_BACKGROUND,
             reviewCriteria: ['Quality', 'Communication', 'Value for Money'],
+            isCustom: true,
             visibility: 'PRIVATE',
             ownerUserId: String(req.user.id),
             ownerUserName: String(req.body.userName || '').trim(),
@@ -376,7 +441,8 @@ app.post('/users/services/custom', verifyToken, async (req, res) => {
 
 app.patch('/users/services/:serviceId', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        const service = await Service.findOne({ serviceId: req.params.serviceId.toLowerCase(), isActive: true });
+        const serviceId = req.params.serviceId.toLowerCase();
+        const service = await findOrCreateEditableService(serviceId, req.user.id);
         if (!service) return err(res, 'Service not found', 404);
 
         const updates = {};
@@ -399,12 +465,19 @@ app.patch('/users/services/:serviceId', verifyToken, verifyAdmin, async (req, re
         }
 
         if ('visibility' in req.body) {
-            updates.visibility = req.body.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+            updates.visibility = isDefaultServiceId(serviceId)
+                ? 'PUBLIC'
+                : req.body.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
         }
 
         Object.entries(updates).forEach(([key, value]) => {
             if (value !== '') service[key] = value;
         });
+
+        if (isDefaultServiceId(serviceId)) {
+            service.isCustom = false;
+            service.visibility = 'PUBLIC';
+        }
 
         await service.save();
         ok(res, { service: sanitizeService(service) });
@@ -415,7 +488,8 @@ app.patch('/users/services/:serviceId', verifyToken, verifyAdmin, async (req, re
 
 app.patch('/users/services/:serviceId/publish', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        const service = await Service.findOne({ serviceId: req.params.serviceId.toLowerCase(), isActive: true });
+        const serviceId = req.params.serviceId.toLowerCase();
+        const service = await findOrCreateEditableService(serviceId, req.user.id);
         if (!service) return err(res, 'Service not found', 404);
 
         ['name', 'icon', 'description', 'category', 'backgroundImage'].forEach((field) => {
@@ -435,6 +509,7 @@ app.patch('/users/services/:serviceId/publish', verifyToken, verifyAdmin, async 
             if (nextCriteria.length) service.reviewCriteria = nextCriteria;
         }
 
+        service.isCustom = isDefaultServiceId(serviceId) ? false : service.isCustom !== false;
         service.visibility = 'PUBLIC';
         service.publishedAt = new Date();
         service.publishedBy = String(req.user.id);
