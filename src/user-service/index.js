@@ -120,6 +120,15 @@ const sanitizeUser = (user) => ({
     role: user.role,
 });
 
+const decodeAuthToken = (authorization = '') => {
+    if (!authorization?.startsWith('Bearer ')) return null;
+    try {
+        return jwt.verify(authorization.replace('Bearer ', ''), JWT_SECRET);
+    } catch {
+        return null;
+    }
+};
+
 const verifyToken = (req, res, next) => {
     const h = req.headers.authorization;
     if (!h) return err(res, 'No token provided', 403);
@@ -149,7 +158,11 @@ const slugify = (value = '') =>
         .replace(/[^a-z0-9]+/g, '-')
         .replace(/^-+|-+$/g, '') || `service-${Date.now()}`;
 
-const sanitizeService = (service) => {
+const createCustomServiceId = (name = 'custom-service', userId = 'user') =>
+    `${slugify(name)}-${String(userId).slice(-6)}-${Date.now().toString(36)}`;
+
+const sanitizeService = (service, options = {}) => {
+    const { includeOwnerDetails = false } = options;
     const source = service.toObject ? service.toObject() : service;
     return {
         id: source.serviceId,
@@ -163,6 +176,12 @@ const sanitizeService = (service) => {
             ? source.reviewCriteria
             : ['Quality', 'Timeliness', 'Professionalism'],
         isCustom: source.isCustom !== false,
+        visibility: source.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+        ownerUserId: source.ownerUserId || null,
+        ownerUserName: includeOwnerDetails ? source.ownerUserName || null : null,
+        publishedAt: source.publishedAt || null,
+        publishedBy: source.publishedBy || null,
+        createdBy: source.createdBy || null,
     };
 };
 
@@ -265,11 +284,26 @@ app.get('/users/internal/:id', verifyInternalToken, async (req, res) => {
 
 app.get('/users/services', async (req, res) => {
     try {
-        const customServices = await Service.find({ isActive: true }).sort({ createdAt: -1 });
+        const requester = decodeAuthToken(req.headers.authorization);
+        const includeOwnerDetails = requester?.role === 'ADMIN';
+        const serviceFilter = { isActive: true };
+
+        if (requester?.role === 'ADMIN') {
+            // Admin can inspect both public and private services.
+        } else if (requester?.id) {
+            serviceFilter.$or = [
+                { visibility: 'PUBLIC' },
+                { ownerUserId: String(requester.id) },
+            ];
+        } else {
+            serviceFilter.visibility = 'PUBLIC';
+        }
+
+        const customServices = await Service.find(serviceFilter).sort({ createdAt: -1 });
         ok(res, {
             services: [
-                ...DEFAULT_SERVICES.map((service) => sanitizeService(service)),
-                ...customServices.map((service) => sanitizeService(service)),
+                ...DEFAULT_SERVICES.map((service) => sanitizeService(service, { includeOwnerDetails })),
+                ...customServices.map((service) => sanitizeService(service, { includeOwnerDetails })),
             ],
         });
     } catch (e) {
@@ -299,10 +333,114 @@ app.post('/users/services', verifyToken, verifyAdmin, async (req, res) => {
             category: String(req.body.category || 'General').trim(),
             backgroundImage: String(req.body.backgroundImage || '').trim() || DEFAULT_SERVICE_BACKGROUND,
             reviewCriteria: parseReviewCriteria(req.body.reviewCriteria),
+            visibility: 'PUBLIC',
             createdBy: req.user.id,
         });
 
         ok(res, { service: sanitizeService(service) }, 201);
+    } catch (e) {
+        err(res, e.message, 500);
+    }
+});
+
+app.post('/users/services/custom', verifyToken, async (req, res) => {
+    try {
+        const name = String(req.body.name || '').trim();
+        const description = String(req.body.description || '').trim();
+        const budget = Number(req.body.budget);
+
+        if (!name || !description || !budget || budget <= 0)
+            return err(res, 'name, description, and a valid budget are required');
+
+        const service = await Service.create({
+            serviceId: createCustomServiceId(name, req.user.id),
+            name,
+            icon: '\u2728',
+            description,
+            priceFrom: budget,
+            category: 'Custom',
+            backgroundImage: DEFAULT_SERVICE_BACKGROUND,
+            reviewCriteria: ['Quality', 'Communication', 'Value for Money'],
+            visibility: 'PRIVATE',
+            ownerUserId: String(req.user.id),
+            ownerUserName: String(req.body.userName || '').trim(),
+            ownerUserEmail: String(req.body.userEmail || '').trim().toLowerCase(),
+            createdBy: String(req.user.id),
+        });
+
+        ok(res, { service: sanitizeService(service) }, 201);
+    } catch (e) {
+        err(res, e.message, 500);
+    }
+});
+
+app.patch('/users/services/:serviceId', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const service = await Service.findOne({ serviceId: req.params.serviceId.toLowerCase(), isActive: true });
+        if (!service) return err(res, 'Service not found', 404);
+
+        const updates = {};
+        const updatableFields = ['name', 'icon', 'description', 'category', 'backgroundImage'];
+
+        updatableFields.forEach((field) => {
+            if (field in req.body) {
+                updates[field] = String(req.body[field] || '').trim();
+            }
+        });
+
+        if ('priceFrom' in req.body) {
+            const nextPrice = Number(req.body.priceFrom);
+            if (!nextPrice || nextPrice <= 0) return err(res, 'priceFrom must be greater than 0');
+            updates.priceFrom = nextPrice;
+        }
+
+        if ('reviewCriteria' in req.body) {
+            updates.reviewCriteria = parseReviewCriteria(req.body.reviewCriteria);
+        }
+
+        if ('visibility' in req.body) {
+            updates.visibility = req.body.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC';
+        }
+
+        Object.entries(updates).forEach(([key, value]) => {
+            if (value !== '') service[key] = value;
+        });
+
+        await service.save();
+        ok(res, { service: sanitizeService(service) });
+    } catch (e) {
+        err(res, e.message, 500);
+    }
+});
+
+app.patch('/users/services/:serviceId/publish', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        const service = await Service.findOne({ serviceId: req.params.serviceId.toLowerCase(), isActive: true });
+        if (!service) return err(res, 'Service not found', 404);
+
+        ['name', 'icon', 'description', 'category', 'backgroundImage'].forEach((field) => {
+            if (field in req.body) {
+                const nextValue = String(req.body[field] || '').trim();
+                if (nextValue) service[field] = nextValue;
+            }
+        });
+
+        if ('priceFrom' in req.body) {
+            const nextPrice = Number(req.body.priceFrom);
+            if (nextPrice > 0) service.priceFrom = nextPrice;
+        }
+
+        if ('reviewCriteria' in req.body) {
+            const nextCriteria = parseReviewCriteria(req.body.reviewCriteria);
+            if (nextCriteria.length) service.reviewCriteria = nextCriteria;
+        }
+
+        service.visibility = 'PUBLIC';
+        service.publishedAt = new Date();
+        service.publishedBy = String(req.user.id);
+
+        await service.save();
+        ok(res, { service: sanitizeService(service), message: 'Service published for everyone.' });
     } catch (e) {
         err(res, e.message, 500);
     }

@@ -20,6 +20,8 @@ import {
   getServices,
   loadServices,
   createService,
+  updateService,
+  publishService,
   SERVICES_REGISTRY_EVENT,
   DEFAULT_SERVICE_BACKGROUND,
 } from '../utils/services';
@@ -74,27 +76,87 @@ function StatusBadge({ status, paymentStatus }) {
 
 function OrderManagement() {
   const [orders, setOrders] = useState([]);
+  const [servicesById, setServicesById] = useState({});
   const [tab, setTab] = useState('PENDING');
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(null);
   const [reason, setReason] = useState('');
   const [rejectFor, setRejectFor] = useState(null);
+  const [serviceEdits, setServiceEdits] = useState({});
   const [msg, setMsg] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await api.get(`/orders?status=${tab}`);
-      setOrders(r.data?.orders || []);
+      const [orderResponse, serviceList] = await Promise.all([
+        api.get(`/orders?status=${tab}`),
+        loadServices(api).catch(() => getServices()),
+      ]);
+      setOrders(orderResponse.data?.orders || []);
+      setServicesById(Object.fromEntries((serviceList || []).map((service) => [service.id, service])));
     } catch (err) {
       console.error('API Error:', err.response?.data || err.message);
       setOrders([]);
+      setServicesById(Object.fromEntries(getServices().map((service) => [service.id, service])));
     } finally {
       setLoading(false);
     }
   }, [tab]);
 
   useEffect(() => { load(); }, [load]);
+
+  const getServiceMeta = (order) => servicesById[order.serviceId] || null;
+
+  const getDraftForOrder = (order) => {
+    const service = getServiceMeta(order);
+    return serviceEdits[order.serviceId] || {
+      name: service?.name || order.serviceName,
+      description: service?.description || order.description,
+      backgroundImage: service?.backgroundImage && service.backgroundImage !== DEFAULT_SERVICE_BACKGROUND ? service.backgroundImage : '',
+      priceFrom: String(service?.priceFrom || order.amount || ''),
+      category: service?.category || 'Custom',
+      reviewCriteria: Array.isArray(service?.reviewCriteria) ? service.reviewCriteria.join(', ') : '',
+    };
+  };
+
+  const updateDraft = (order, field, value) => {
+    const service = getServiceMeta(order);
+    setServiceEdits((current) => ({
+      ...current,
+      [order.serviceId]: {
+        ...(current[order.serviceId] || {
+          name: service?.name || order.serviceName,
+          description: service?.description || order.description,
+          backgroundImage: service?.backgroundImage && service.backgroundImage !== DEFAULT_SERVICE_BACKGROUND ? service.backgroundImage : '',
+          priceFrom: String(service?.priceFrom || order.amount || ''),
+          category: service?.category || 'Custom',
+          reviewCriteria: Array.isArray(service?.reviewCriteria) ? service.reviewCriteria.join(', ') : '',
+        }),
+        [field]: value,
+      },
+    }));
+  };
+
+  const syncCustomService = async (order, publish = false) => {
+    const draft = getDraftForOrder(order);
+    const payload = {
+      name: draft.name,
+      description: draft.description,
+      backgroundImage: draft.backgroundImage,
+      priceFrom: Number(draft.priceFrom) > 0 ? Number(draft.priceFrom) : Number(order.amount),
+      category: draft.category || 'Custom',
+      reviewCriteria: draft.reviewCriteria,
+    };
+
+    if (publish) {
+      await publishService(api, order.serviceId, payload);
+    } else {
+      await updateService(api, order.serviceId, payload);
+    }
+
+    const refreshedServices = await loadServices(api).catch(() => getServices());
+    setServicesById(Object.fromEntries((refreshedServices || []).map((service) => [service.id, service])));
+  };
 
   const doAction = async (orderId, action, body = {}) => {
     if (action === 'reject' && !String(body.reason || '').trim()) {
@@ -125,6 +187,41 @@ function OrderManagement() {
     }
   };
 
+  const approveCustomOrder = async (order) => {
+    setActing(order._id + 'approve');
+    setMsg(null);
+
+    try {
+      await syncCustomService(order, false);
+      const response = await api.patch(`/orders/${order._id}/approve`);
+      const notification = response.data?.notification;
+      setMsg({
+        type: notification?.success === false ? 'error' : 'success',
+        text: response.data?.message || 'Custom service approved successfully.',
+      });
+      load();
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to approve the custom service request.' });
+    } finally {
+      setActing(null);
+    }
+  };
+
+  const publishCompletedService = async (order) => {
+    setActing(order._id + 'publish');
+    setMsg(null);
+
+    try {
+      await syncCustomService(order, true);
+      setMsg({ type: 'success', text: `${order.serviceName} is now published for everyone.` });
+      load();
+    } catch (err) {
+      setMsg({ type: 'error', text: err.response?.data?.message || 'Failed to publish this service.' });
+    } finally {
+      setActing(null);
+    }
+  };
+
   return (
     <div className="animate-in">
       {msg && <div className={`alert ${msg.type === 'success' ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: '1.5rem' }}>{msg.text}</div>}
@@ -145,11 +242,20 @@ function OrderManagement() {
       ) : (
         orders.map((order) => (
           <div key={order._id} className="card" style={{ marginBottom: '1rem', padding: '1.25rem' }}>
+            {(() => {
+              const service = getServiceMeta(order);
+              const draft = getDraftForOrder(order);
+              const canPublish = order.isCustomService && service?.visibility !== 'PUBLIC' && order.status === 'COMPLETED' && order.paymentStatus === 'PAID';
+              return (
+                <>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                   <span style={{ fontWeight: 700, fontSize: '1rem' }}>{order.serviceName}</span>
                   <StatusBadge status={order.status} paymentStatus={order.paymentStatus} />
+                  {order.isCustomService && (
+                    <span className="badge badge-primary">{service?.visibility === 'PUBLIC' ? 'PUBLISHED' : 'CUSTOM'}</span>
+                  )}
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.83rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                   <span>${order.amount}</span>
@@ -169,7 +275,11 @@ function OrderManagement() {
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 {order.status === 'PENDING' && (
                   <>
-                    <button className="btn btn-success btn-sm" disabled={acting === order._id + 'approve'} onClick={() => doAction(order._id, 'approve')}>
+                    <button
+                      className="btn btn-success btn-sm"
+                      disabled={acting === order._id + 'approve'}
+                      onClick={() => (order.isCustomService ? approveCustomOrder(order) : doAction(order._id, 'approve'))}
+                    >
                       {acting === order._id + 'approve' ? <span className="spinner" /> : <><CheckCircle size={13} /> Approve</>}
                     </button>
                     <button className="btn btn-danger btn-sm" onClick={() => { setRejectFor(order._id); setMsg(null); }}>
@@ -187,6 +297,16 @@ function OrderManagement() {
                     <Clock size={13} /> Awaiting payment
                   </span>
                 )}
+                {canPublish && (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    disabled={acting === order._id + 'publish'}
+                    onClick={() => publishCompletedService(order)}
+                    style={{ borderColor: '#22c55e', color: '#86efac' }}
+                  >
+                    {acting === order._id + 'publish' ? <span className="spinner" /> : <><PlusCircle size={13} /> Publish</>}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -199,6 +319,47 @@ function OrderManagement() {
                 <button className="btn btn-secondary btn-sm" onClick={() => { setRejectFor(null); setReason(''); }}>Cancel</button>
               </div>
             )}
+
+            {order.isCustomService && (
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', display: 'grid', gap: '0.85rem' }}>
+                <div style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>
+                  {service?.visibility === 'PUBLIC'
+                    ? 'Published custom service details'
+                    : 'Admin service details for this private custom request'}
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Service name</label>
+                    <input className="form-control" value={draft.name} onChange={(e) => updateDraft(order, 'name', e.target.value)} />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Category</label>
+                    <input className="form-control" value={draft.category} onChange={(e) => updateDraft(order, 'category', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Description for user</label>
+                  <textarea className="form-control" rows={3} value={draft.description} onChange={(e) => updateDraft(order, 'description', e.target.value)} style={{ resize: 'vertical' }} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Background image URL</label>
+                    <input className="form-control" placeholder="https://example.com/image.jpg" value={draft.backgroundImage} onChange={(e) => updateDraft(order, 'backgroundImage', e.target.value)} />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label>Publish price from ($)</label>
+                    <input className="form-control" type="number" min="1" value={draft.priceFrom} onChange={(e) => updateDraft(order, 'priceFrom', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Review criteria</label>
+                  <input className="form-control" placeholder="Quality, Communication, Value for Money" value={draft.reviewCriteria} onChange={(e) => updateDraft(order, 'reviewCriteria', e.target.value)} />
+                </div>
+              </div>
+            )}
+                </>
+              );
+            })()}
           </div>
         ))
       )}
@@ -318,15 +479,23 @@ function ServicesManagement() {
               backgroundPosition: 'center',
             }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
-              <div style={{ fontSize: '2rem' }}>{service.icon}</div>
-              <span className={`badge ${service.isCustom ? 'badge-success' : 'badge-primary'}`}>{service.isCustom ? 'CUSTOM' : 'BUILT-IN'}</span>
-            </div>
-            <div>
-              <h3 style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>{service.name}</h3>
-              <div style={{ color: '#dbe4f0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{service.category}</div>
-              <p style={{ color: '#dbe4f0', fontSize: '0.88rem', lineHeight: 1.6 }}>{service.description}</p>
-            </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem' }}>
+                <div style={{ fontSize: '2rem' }}>{service.icon}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', alignItems: 'flex-end' }}>
+                  <span className={`badge ${service.isCustom ? 'badge-success' : 'badge-primary'}`}>{service.isCustom ? 'CUSTOM' : 'BUILT-IN'}</span>
+                  <span className={`badge ${service.visibility === 'PRIVATE' ? 'badge-warn' : 'badge-primary'}`}>{service.visibility || 'PUBLIC'}</span>
+                </div>
+              </div>
+              <div>
+                <h3 style={{ fontSize: '1rem', marginBottom: '0.35rem' }}>{service.name}</h3>
+                <div style={{ color: '#dbe4f0', fontSize: '0.85rem', marginBottom: '0.5rem' }}>{service.category}</div>
+                {service.ownerUserName && (
+                  <div style={{ color: '#cbd5e1', fontSize: '0.78rem', marginBottom: '0.45rem' }}>
+                    Owner: {service.ownerUserName}
+                  </div>
+                )}
+                <p style={{ color: '#dbe4f0', fontSize: '0.88rem', lineHeight: 1.6 }}>{service.description}</p>
+              </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
               <span style={{ color: '#6ee7b7', fontWeight: 700 }}>From ${service.priceFrom}</span>
               <span style={{ color: '#94a3b8', fontSize: '0.78rem' }}>ID: {service.id}</span>

@@ -6,6 +6,13 @@ const orderSchema = new mongoose.Schema({
     userEmail:     { type: String, lowercase: true, trim: true },
     serviceId:     { type: String, required: true },
     serviceName:   { type: String, required: true },
+    isCustomService: { type: Boolean, default: false },
+    serviceVisibility: {
+        type: String,
+        enum: ['PUBLIC', 'PRIVATE'],
+        default: 'PUBLIC'
+    },
+    serviceOwnerUserId: { type: String, trim: true },
     description:   { type: String, required: true },
     address:       { type: String, required: true },
     scheduledDate: { type: Date,   required: true },

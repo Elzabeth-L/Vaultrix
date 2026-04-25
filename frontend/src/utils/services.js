@@ -1,7 +1,9 @@
+import { getCurrentUser } from './auth';
+
 export const DEFAULT_SERVICE_BACKGROUND = 'https://images.openai.com/static-rsc-4/aMF6yfUacXWNU326dNEtZOm0Epe1hDm9ot18K-e8hLSVuXUFPwPGefc6ioebEyCOUvSfG1x15R5MWEoPeAsdck3B6FSgyzu9QnzibFNBgEF-M9sgzq25OA0ed0O6uxeru5nCuyt0-kBXsZZPxTuEqT9DRVfxFmIINIvquRdnNSd2Hk0XsZ_SyRVuVxYrjbpE?purpose=fullsize';
 export const SERVICES_REGISTRY_EVENT = 'vaultrix:services-updated';
 
-const SERVICES_CACHE_KEY = 'vaultrix_services_cache';
+const SERVICES_CACHE_PREFIX = 'vaultrix_services_cache';
 
 const DEFAULT_SERVICES = [
   {
@@ -100,6 +102,13 @@ export const REVIEW_CRITERIA = {
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
+const getViewerCacheKey = () => {
+  const viewer = getCurrentUser();
+  if (!viewer?.id) return `${SERVICES_CACHE_PREFIX}_guest`;
+  if (viewer.role === 'ADMIN') return `${SERVICES_CACHE_PREFIX}_admin`;
+  return `${SERVICES_CACHE_PREFIX}_${viewer.id}`;
+};
+
 const normalizeService = (service = {}) => ({
   id: String(service.id || service.serviceId || '').trim().toLowerCase(),
   name: String(service.name || '').trim(),
@@ -112,6 +121,13 @@ const normalizeService = (service = {}) => ({
     ? service.reviewCriteria.map((item) => String(item || '').trim()).filter(Boolean)
     : REVIEW_CRITERIA.default,
   isCustom: Boolean(service.isCustom),
+  visibility: service.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+  ownerUserId: service.ownerUserId || null,
+  ownerUserName: service.ownerUserName || null,
+  ownerUserEmail: service.ownerUserEmail || null,
+  publishedAt: service.publishedAt || null,
+  publishedBy: service.publishedBy || null,
+  createdBy: service.createdBy || null,
 });
 
 const emitServicesUpdated = () => {
@@ -123,7 +139,7 @@ const emitServicesUpdated = () => {
 const readCache = () => {
   if (!canUseStorage()) return null;
   try {
-    const raw = window.localStorage.getItem(SERVICES_CACHE_KEY);
+    const raw = window.localStorage.getItem(getViewerCacheKey());
     return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
@@ -133,7 +149,7 @@ const readCache = () => {
 export const cacheServices = (services = []) => {
   const normalized = services.map(normalizeService);
   if (canUseStorage()) {
-    window.localStorage.setItem(SERVICES_CACHE_KEY, JSON.stringify(normalized));
+    window.localStorage.setItem(getViewerCacheKey(), JSON.stringify(normalized));
   }
   emitServicesUpdated();
   return normalized;
@@ -167,6 +183,30 @@ export const createService = async (api, payload) => {
   const existing = getServices().filter((service) => service.id !== created.id);
   cacheServices([...existing, created]);
   return created;
+};
+
+export const createCustomService = async (api, payload) => {
+  const response = await api.post('/users/services/custom', payload);
+  const created = normalizeService(response.data?.service || {});
+  const existing = getServices().filter((service) => service.id !== created.id);
+  cacheServices([...existing, created]);
+  return created;
+};
+
+export const updateService = async (api, serviceId, payload) => {
+  const response = await api.patch(`/users/services/${serviceId}`, payload);
+  const updated = normalizeService(response.data?.service || {});
+  const existing = getServices().filter((service) => service.id !== updated.id);
+  cacheServices([...existing, updated]);
+  return updated;
+};
+
+export const publishService = async (api, serviceId, payload) => {
+  const response = await api.patch(`/users/services/${serviceId}/publish`, payload);
+  const updated = normalizeService(response.data?.service || {});
+  const existing = getServices().filter((service) => service.id !== updated.id);
+  cacheServices([...existing, updated]);
+  return updated;
 };
 
 export const SERVICES = DEFAULT_SERVICES.map(normalizeService);

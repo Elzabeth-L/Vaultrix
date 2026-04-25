@@ -38,6 +38,9 @@ export default function RequestServiceModal({ service, onClose, onSuccess }) {
         address: form.address,
         scheduledDate: form.scheduledDate,
         amount: fixedAmount,
+        isCustomService: Boolean(service.isCustom),
+        serviceVisibility: service.visibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+        serviceOwnerUserId: service.ownerUserId || user.id,
       });
       onSuccess?.();
     } catch (err) {

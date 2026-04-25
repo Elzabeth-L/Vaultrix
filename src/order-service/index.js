@@ -92,6 +92,7 @@ app.post('/orders', async (req, res) => {
         const {
             userId, userName, userEmail,
             serviceId, serviceName, description, address, scheduledDate, amount,
+            isCustomService, serviceVisibility, serviceOwnerUserId,
         } = req.body;
 
         if (!userId || !userName || !userEmail || !serviceId || !serviceName || !description || !address || !scheduledDate || !amount)
@@ -103,6 +104,9 @@ app.post('/orders', async (req, res) => {
             userEmail: userEmail.toLowerCase(),
             serviceId,
             serviceName,
+            isCustomService: Boolean(isCustomService),
+            serviceVisibility: serviceVisibility === 'PRIVATE' ? 'PRIVATE' : 'PUBLIC',
+            serviceOwnerUserId: serviceVisibility === 'PRIVATE' || isCustomService ? (serviceOwnerUserId || userId) : undefined,
             description,
             address,
             scheduledDate: new Date(scheduledDate),

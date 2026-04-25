@@ -5,7 +5,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import api, { buildApiUrl } from '../api';
 import ReviewModal from '../components/ReviewModal';
 import { clearAuth, getCurrentUser, setCurrentUser } from '../utils/auth';
-import { loadServices } from '../utils/services';
+import { getServiceById, loadServices } from '../utils/services';
 
 function Sidebar({ active, setActive }) {
   const navigate = useNavigate();
@@ -161,11 +161,15 @@ function OrdersPanel() {
       ) : (
         orders.map((order) => (
           <div key={order._id} className="card" style={{ marginBottom: '1rem', padding: '1.25rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
+            {(() => {
+              const service = getServiceById(order.serviceId);
+              return (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem' }}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>{order.serviceName}</span>
+                  <span style={{ fontWeight: 700, fontSize: '1rem' }}>{service?.name || order.serviceName}</span>
                   <StatusBadge status={order.status} paymentStatus={order.paymentStatus} />
+                  {order.isCustomService && <span className="badge badge-primary">{service?.visibility === 'PUBLIC' ? 'Published Service' : 'Custom Service'}</span>}
                 </div>
                 <div style={{ color: '#94a3b8', fontSize: '0.85rem', display: 'flex', flexWrap: 'wrap', gap: '1rem' }}>
                   <span>${order.amount}</span>
@@ -173,6 +177,11 @@ function OrdersPanel() {
                   <span>{new Date(order.scheduledDate).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
                   <span>Ref: #{order._id?.slice(-6)}</span>
                 </div>
+                {service?.description && service.description !== order.description && (
+                  <div style={{ marginTop: '0.5rem', color: '#cbd5e1', fontSize: '0.82rem' }}>
+                    Admin update: {service.description}
+                  </div>
+                )}
                 {order.rejectionReason && <div style={{ marginTop: '0.5rem', color: '#f87171', fontSize: '0.85rem' }}>Reason: {order.rejectionReason}</div>}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
@@ -199,7 +208,9 @@ function OrdersPanel() {
                   <span className="badge badge-success">Reviewed</span>
                 )}
               </div>
-            </div>
+                </div>
+              );
+            })()}
           </div>
         ))
       )}
@@ -261,26 +272,27 @@ function WalletPanel() {
 
   return (
     <div className="animate-in">
-      <div className="stats-grid" style={{ marginBottom: '2rem' }}>
-        <div className="stat-card">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', alignItems: 'stretch' }}>
+        <div className="stat-card" style={{ marginBottom: 0 }}>
           <div className="stat-icon indigo"><Wallet size={20} /></div>
           <div className="card-title">Wallet Balance</div>
           <div className="card-value">${wallet?.balance?.toFixed(2) ?? '0.00'}</div>
           <div className="card-sub">Available to spend</div>
         </div>
-      </div>
-      <div className="card" style={{ maxWidth: 400 }}>
-        <h2 style={{ marginBottom: '1.25rem' }}>Add Funds</h2>
-        {msg && <div className={`alert ${msg.toLowerCase().includes('successfully') ? 'alert-success' : 'alert-error'}`}>{msg}</div>}
-        <form onSubmit={fund}>
-          <div className="form-group">
-            <label>Amount ($)</label>
-            <input type="number" className="form-control" placeholder="500" value={amount} onChange={(e) => setAmount(e.target.value)} min="1" required />
-          </div>
-          <button className="btn btn-primary" type="submit" disabled={funding}>
-            {funding ? <span className="spinner" /> : 'Add Funds'}
-          </button>
-        </form>
+
+        <div className="card" style={{ margin: 0 }}>
+          <h2 style={{ marginBottom: '1.25rem' }}>Add Funds</h2>
+          {msg && <div className={`alert ${msg.toLowerCase().includes('successfully') ? 'alert-success' : 'alert-error'}`}>{msg}</div>}
+          <form onSubmit={fund}>
+            <div className="form-group">
+              <label>Amount ($)</label>
+              <input type="number" className="form-control" placeholder="500" value={amount} onChange={(e) => setAmount(e.target.value)} min="1" required />
+            </div>
+            <button className="btn btn-primary" type="submit" disabled={funding}>
+              {funding ? <span className="spinner" /> : 'Add Funds'}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
   );
